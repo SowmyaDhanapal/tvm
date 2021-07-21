@@ -32,6 +32,9 @@
 #include "../json/json_node.h"
 #include "../json/json_runtime.h"
 
+#include "metawarenn_lib/metawarenn_graph.cc"
+#include "metawarenn_lib/executable_network/metawarenn_executable_graph.h"
+
 namespace tvm {
 namespace runtime {
 namespace contrib {
@@ -50,11 +53,27 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
 
   void Init(const Array<NDArray>& consts) override {
     std::cout << "\n In MetaWareNN INIT!!!";
+    std::cout << "\n Total Constants : " << consts.size();
+    ICHECK_EQ(consts.size(), const_idx_.size())
+        << "The number of input constants must match the number of required.";
+    // Setup constants entries for weights.
+    SetupConstants(consts);
+    BuildMetaWareNNGraph();
   }
 
   void Run() override {
     std::cout << "\n In MetaWareNN RUNN!!!";
   }
+
+ private:
+  std::shared_ptr<::metawarenn::MWNNGraph> mwnn_graph_;
+  std::shared_ptr<::metawarenn::MWNNExecutableGraph> mwnn_exe_graph_;
+  // Build up the engine based on the input graph.
+  void BuildMetaWareNNGraph() {
+    std::cout << "\n In BuildMetaWareNNGraph " << symbol_name_;
+    mwnn_graph_ = std::make_shared<::metawarenn::MWNNGraph>(nodes_, symbol_name_);
+  }
+
 };
 
 runtime::Module MetaWareNNJSONRuntimeCreate(String symbol_name, String graph_json,

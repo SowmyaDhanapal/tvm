@@ -53,7 +53,6 @@ class MetaWareNNJSONSerializer : public backend::contrib::JSONSerializer {
   std::vector<JSONGraphNodeEntry> VisitExpr_(const CallNode* cn) override {
     Expr expr = GetRef<Expr>(cn);
     std::string name;
-    const CallNode* call = cn;
     if (const auto* op_node = cn->op.as<OpNode>()) {
       name = op_node->name;
     }
@@ -66,10 +65,11 @@ class MetaWareNNJSONSerializer : public backend::contrib::JSONSerializer {
       auto res = VisitExpr(arg);
       inputs.insert(inputs.end(), res.begin(), res.end());
     }
+    //std::cout << "\n In VisitExpr_ : " << name;
     auto node = std::make_shared<JSONGraphNode>(name,     /* name_ */
                                                 "kernel", /* op_type_ */
                                                 inputs, 1 /* num_outputs_ */);
-    SetCallNodeAttribute(node, call);
+    SetCallNodeAttribute(node, cn);
     return AddNode(node, GetRef<Expr>(cn));
   }
 };

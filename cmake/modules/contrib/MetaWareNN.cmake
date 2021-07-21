@@ -15,12 +15,16 @@
 # specific language governing permissions and limitations
 # under the License.
 
-if((USE_METAWARENN_CODEGEN STREQUAL "ON") OR (USE_METAWARENN_CODEGEN STREQUAL "JSON"))
+if(USE_METAWARENN_CODEGEN STREQUAL "ON")
   add_definitions(-DUSE_JSON_RUNTIME=1)
   file(GLOB METAWARENN_RELAY_CONTRIB_SRC src/relay/backend/contrib/metawarenn/*.cc)
   list(APPEND COMPILER_SRCS ${METAWARENN_RELAY_CONTRIB_SRC})
   list(APPEND COMPILER_SRCS ${JSON_RELAY_CONTRIB_SRC})
 
+  file(GLOB_RECURSE METAWARENN_LIB_HDR src/relay/backend/contrib/metawarenn/metawarenn_lib/*.h)
+  file(GLOB_RECURSE METAWARENN_LIB_SRC src/relay/backend/contrib/metawarenn/metawarenn_lib/*.cc)
+  list(APPEND RUNTIME_SRCS ${METAWARENN_LIB_HDR})
+  list(APPEND RUNTIME_SRCS ${METAWARENN_LIB_SRC})
   file(GLOB METAWARENN_CONTRIB_SRC src/runtime/contrib/metawarenn/metawarenn_json_runtime.cc)
   list(APPEND RUNTIME_SRCS ${METAWARENN_CONTRIB_SRC})
 endif()

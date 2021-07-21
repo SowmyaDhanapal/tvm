@@ -20,6 +20,7 @@
 
 import tvm.ir
 from tvm.relay import transform
+from tvm.relay.build_module import bind_params_by_name
 
 def _register_external_op_helper(op_name, supported=True):
     """The helper function to indicate that a given operator can be supported
@@ -65,6 +66,8 @@ def partition_for_metawarenn(mod, params=None):
     mod : Tuple[Module, Dict[str, Any]]
         A tuple of annotated and partitioned module
     """
+    if params:
+        mod["main"] = bind_params_by_name(mod["main"], params)
     seq = tvm.transform.Sequential(
     [
         transform.InferType(),
@@ -76,6 +79,6 @@ def partition_for_metawarenn(mod, params=None):
         transform.InferType(),
     ]
     )
-    with tvm.transform.PassContext():
+    with tvm.transform.PassContext(opt_level=3):
         mod = seq(mod)
     return mod
