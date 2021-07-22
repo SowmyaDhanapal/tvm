@@ -515,10 +515,113 @@ MWNNGraph::MWNNGraph(Function *F, std::string subgraph_name) {
 MWNNGraph::MWNNGraph(std::vector<JSONGraphNode> graph_nodes_, std::string graph_name) {
   std::cout << "\n In TVM Metawarenn graph constructor!!  " << graph_name;
   name = graph_name;
+  int layer_count = 0;
   for (int id = 0; id < graph_nodes_.size(); id++) {
     const auto& node = graph_nodes_[id];
-    std::cout << "\n Node Op Type : " << node.GetOpType() << " Name : " << node.GetOpName();
+    //std::cout << "\n Node Op Type : " << node.GetOpType() << " Name : " << node.GetOpName();
+    if (node.GetOpType() == "kernel") {
+      std::string node_name;
+      std::string node_op_type;
+      std::vector<std::string> node_inputs;
+      std::vector<std::string> node_outputs;
+      int out_index = 1;
+
+      //Node Inputs Parsing
+      for (size_t i = 0; i < node.GetInputs().size(); ++i) {
+        auto in_node = node.GetInputs()[i];
+        out_index = in_node.id_;
+        std::string ip_name = "node_" + std::to_string(in_node.id_);
+        node_inputs.emplace_back(ip_name);
+      }
+      //Node Output Parsing
+      std::string op_name = "node_" + std::to_string(out_index+1);
+      node_outputs.emplace_back(op_name);
+
+      //Setting MetaWareNN Op Type & Node Name
+      if (node.GetOpName() == "nn.conv2d") {
+        node_op_type = "Conv";
+        node_name = node_op_type + std::to_string(layer_count++);
+      }
+      else if (node.GetOpName() == "nn.batch_norm") {
+        node_op_type = "BatchNorm";
+        node_name = node_op_type + std::to_string(layer_count++);
+      }
+      else if (node.GetOpName() == "nn.relu") {
+        node_op_type = "Relu";
+        node_name = node_op_type + std::to_string(layer_count++);
+      }
+      else if (node.GetOpName() == "add") {
+        node_op_type = "Add";
+        node_name = node_op_type + std::to_string(layer_count++);
+      }
+      else if (node.GetOpName() == "nn.global_avg_pool2d") {
+        node_op_type = "GlobalAveragePool";
+        node_name = node_op_type + std::to_string(layer_count++);
+      }
+      else if (node.GetOpName() == "reshape") {
+        node_op_type = "Reshape";
+        node_name = node_op_type + std::to_string(layer_count++);
+      }
+      else {
+        std::cout << "\n Unsupported Op in MetaWareNN backend : " << node.GetOpName();
+        exit(1);
+      }
+      std::cout << "\n ================================Node=============================\n";
+      std::cout << "\n Name : " << node_name;
+      std::cout << "\n Type : " << node_op_type;
+      for (auto nip: node_inputs)
+        std::cout << "\n Inputs : " << nip;
+      for (auto nop: node_outputs)
+        std::cout << "\n Outputs : " << nop;
+    }
   }
+}
+
+void MWNNGraph::set_graph_initializers(std::string const_name, const DLTensor* data) {
+  std::vector<int> dims(data->shape, data->shape + data->ndim);
+  auto total_elements = std::accumulate(begin(dims), end(dims), 1, std::multiplies<int>());
+  std::vector<float> tensor_vec(((float*)(data->data)), ((float*)(data->data)) + total_elements);
+
+  metawarenn::MWNNTensor mwnn_tensor(const_name, dims, data->dtype.code, tensor_vec);
+  mwnn_initializer_tensors.emplace_back(mwnn_tensor);
+  mwnn_initializer_names.insert(mwnn_tensor.get_name());
+  auto const_node = mwnn_tensor.get_constant_node();
+  mwnn_graph_nodes[mwnn_tensor.get_name()] = std::move(const_node);
+}
+
+void MWNNGraph::set_graph_inputs(std::string ip_name, const JSONGraphNode& node) {
+  auto shapes = node.GetOpShape();
+  auto dtypes = node.GetOpDataType();
+
+  for (size_t i = 0; i < shapes.size(); ++i) {
+    auto shape = shapes[i];
+    int size = shape.size();
+    std::vector<int> dims(size);
+    for(int d = 0; d < size; d++)
+      dims[d] = shape[d];
+    auto data_type = static_cast<int>(dtypes[i].code);
+    std::cout << "\nInput Name : " << ip_name;
+    std::cout << "\nInput Dims : ";
+    for(int j=0; j<dims.size(); j++)
+      std::cout << dims[j] << " ";
+    std::cout << "\nInput Type : " << data_type;
+
+    //Update the node name by assuming each graph input has unique JSONGraphNode
+    //i loop runs only once in our case
+    metawarenn::MWNNValueInfo mwnn_input(ip_name, dims, data_type);
+    mwnn_inputs.emplace_back(mwnn_input);
+    mwnn_initializer_names.insert(ip_name);
+  }
+}
+
+void MWNNGraph::set_graph_outputs(const JSONGraphNodeEntry& node) {
+  std::cout << "\n Node id  : " << node.id_;
+  std::cout << "\n Node index : " << node.index_;
+  /*
+    metawarenn::MWNNValueInfo mwnn_output(node_name, dims, data_type);
+    mwnn_outputs.emplace_back(mwnn_output);
+    mwnn_initializer_names.insert(node_name);
+  */
 }
 #endif
 } //namespace metawarenn

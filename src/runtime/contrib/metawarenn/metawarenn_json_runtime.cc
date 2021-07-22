@@ -72,6 +72,26 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
   void BuildMetaWareNNGraph() {
     std::cout << "\n In BuildMetaWareNNGraph " << symbol_name_;
     mwnn_graph_ = std::make_shared<::metawarenn::MWNNGraph>(nodes_, symbol_name_);
+    // Add inputs and constants.
+    for (size_t i = 0; i < input_nodes_.size(); ++i) {
+      auto nid = input_nodes_[i];
+      const auto& node = nodes_[nid];
+      std::string name = "node_" + std::to_string(nid);
+      if (node.GetOpType() == "input") {
+        mwnn_graph_->set_graph_inputs(name, node);
+      }
+      else if (node.GetOpType() == "const") {
+        uint32_t eid = EntryID(nid, 0);
+        std::string name = "node_" + std::to_string(nid);
+        mwnn_graph_->set_graph_initializers(name, data_entry_[eid]);
+      }
+    }
+    // Add outputs.
+    for (size_t i = 0; i < outputs_.size(); ++i) {
+      const auto& node = outputs_[i];
+      std::cout << "\n Node op : " << node.id_;
+      mwnn_graph_->set_graph_outputs(node);
+    }
   }
 
 };

@@ -66,4 +66,15 @@ MWNNTensor::MWNNTensor(std::string t_name, std::vector<int> t_shape) {
   dims = t_shape;
 }
 #endif
+
+#if TVM
+//TVMConstructor
+MWNNTensor::MWNNTensor(std::string m_name, std::vector<int> m_dims, int m_type, std::vector<float> m_tensor) {
+    name = m_name;
+    dims = m_dims;
+    in_type = m_type;
+    t_type = ElementType::get_mwnn_type_tvm(in_type);
+    tensor = m_tensor;
+}
+#endif
 } //namespace metawarenn

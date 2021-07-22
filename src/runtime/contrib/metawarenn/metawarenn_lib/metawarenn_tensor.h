@@ -29,6 +29,9 @@ class MWNNTensor {
     MWNNTensor(std::string m_name, std::vector<int> m_dims, ElemKind m_type, std::vector<float> m_tensor);
     MWNNTensor(std::string t_name, std::vector<int> t_shape);
     #endif
+    #if TVM
+    MWNNTensor(std::string m_name, std::vector<int> m_dims, int m_type, std::vector<float> m_tensor);
+    #endif
     std::string get_name() { return name; }
     int get_type() { return int(t_type); }
     void set_index(uint32_t value) { index = value; }
