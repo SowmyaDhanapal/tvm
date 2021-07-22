@@ -30,7 +30,7 @@ MWNNGraph::MWNNGraph(GraphProto& onnx_graph_proto, std::string graph_name) {
       auto ip_node = mwnn_input.get_node();
       mwnn_graph_nodes[ip_name] = std::move(ip_node);
       //Fills Graph Input Tensor Details - Name, Dims
-      MWNNTensor mwnn_ip_tensor(mwnn_input.get_name(), mwnn_input.get_dims());
+      MWNNTensor mwnn_ip_tensor(mwnn_input.get_name(), mwnn_input.get_type(), mwnn_input.get_dims());
       mwnn_graph_ip_tensors.emplace_back(mwnn_ip_tensor);
     }
   }
@@ -39,7 +39,7 @@ MWNNGraph::MWNNGraph(GraphProto& onnx_graph_proto, std::string graph_name) {
     mwnn_outputs.emplace_back(mwnn_output);
     op_name = mwnn_output.get_name();
     //Fills Graph Output Tensor Details - Name, Dims
-    MWNNTensor mwnn_op_tensor(mwnn_output.get_name(), mwnn_output.get_dims());
+    MWNNTensor mwnn_op_tensor(mwnn_output.get_name(), mwnn_output.get_type(), mwnn_output.get_dims());
     mwnn_graph_op_tensors.emplace_back(mwnn_op_tensor);
   }
 }
@@ -47,8 +47,8 @@ MWNNGraph::MWNNGraph(GraphProto& onnx_graph_proto, std::string graph_name) {
 
 #if TFLITE
 //TFConstructor
-MWNNGraph::MWNNGraph(TfLiteContext* context, std::vector<int> subgraph_nodes_) {
-  name = "MetaWareNN_NodeSubSet_1";
+MWNNGraph::MWNNGraph(TfLiteContext* context, std::vector<int> subgraph_nodes_, std::string subgraph_name) {
+  name = subgraph_name;
   std::cout << "\n----------------------------------------------------------------------------------------------------------------\n";
   std::cout << "\n MWNN Graph Name : " << get_name() << " with size as " << subgraph_nodes_.size() << " nodes";
 
@@ -56,31 +56,36 @@ MWNNGraph::MWNNGraph(TfLiteContext* context, std::vector<int> subgraph_nodes_) {
   TfLiteRegistration* reg;
 
   //Set Graph Input Node
-  context->GetNodeAndRegistration(context, 0, &node, &reg);
+  context->GetNodeAndRegistration(context, subgraph_nodes_[0], &node, &reg);
   int tensor_id = node->inputs->data[0];
   const auto& input_tensor = context->tensors[tensor_id];
   std::vector<int> dims_ip_vec(input_tensor.dims->data, input_tensor.dims->data + input_tensor.dims->size);
   ::metawarenn::MWNNValueInfo mwnn_input(input_tensor.name, dims_ip_vec, input_tensor.type);
   mwnn_inputs.emplace_back(mwnn_input);
   ip_name = input_tensor.name;
-
   auto ip_node = mwnn_input.get_node();
   mwnn_graph_nodes[mwnn_input.get_name()] = std::move(ip_node);
+  //Fills Graph Input Tensor Details - Name, Dims
+  MWNNTensor mwnn_ip_tensor(mwnn_input.get_name(), mwnn_input.get_type(), mwnn_input.get_dims());
+  mwnn_graph_ip_tensors.emplace_back(mwnn_ip_tensor);
 
   //Set Graph Output Node
-  context->GetNodeAndRegistration(context, (subgraph_nodes_.size() - 1), &node, &reg);
+  context->GetNodeAndRegistration(context, subgraph_nodes_[subgraph_nodes_.size()-1], &node, &reg);
   tensor_id = node->outputs->data[0];
   const auto& output_tensor = context->tensors[tensor_id];
   std::vector<int> dims_op_vec(output_tensor.dims->data, output_tensor.dims->data + output_tensor.dims->size);
   ::metawarenn::MWNNValueInfo mwnn_output(output_tensor.name, dims_op_vec, output_tensor.type);
   mwnn_outputs.emplace_back(mwnn_output);
   op_name = output_tensor.name;
+  //Fills Graph Output Tensor Details - Name, Dims
+  MWNNTensor mwnn_op_tensor(mwnn_output.get_name(), mwnn_output.get_type(), mwnn_output.get_dims());
+  mwnn_graph_op_tensors.emplace_back(mwnn_op_tensor);
 
   for (size_t node_index = 0; node_index < subgraph_nodes_.size(); node_index++) {
     std::cout << "\n -------------------------------------------------------------------------------------------------------------";
     TfLiteNode* node;
     TfLiteRegistration* reg;
-    const auto status = context->GetNodeAndRegistration(context, node_index, &node, &reg);
+    const auto status = context->GetNodeAndRegistration(context, subgraph_nodes_[node_index], &node, &reg);
     auto op_type = reg->builtin_code;
 
     std::string node_name;
@@ -92,13 +97,17 @@ MWNNGraph::MWNNGraph(TfLiteContext* context, std::vector<int> subgraph_nodes_) {
     //Op Names are added to follow the same pattern like in ONNX as of now.
     if (op_type == kTfLiteBuiltinConv2d) {
       node_op_type = "Conv";
-      node_name = node_op_type + std::to_string(node_index);
+      node_name = node_op_type + std::to_string(subgraph_nodes_[node_index]);
       const TfLiteConvParams* conv_params = reinterpret_cast<const TfLiteConvParams*>(node->builtin_data);
+      const int weight_tensor_id = node->inputs->data[1];
+      const auto& weight_tensor = context->tensors[weight_tensor_id];
 
       ::metawarenn::MWNNAttribute mwnn_attr_dilate("dilations", {conv_params->dilation_height_factor, conv_params->dilation_width_factor});
       node_attributes.emplace_back(mwnn_attr_dilate);
       ::metawarenn::MWNNAttribute mwnn_attr_stride("strides", {conv_params->stride_height, conv_params->stride_width});
       node_attributes.emplace_back(mwnn_attr_stride);
+      ::metawarenn::MWNNAttribute mwnn_attr_kernel_shape("kernel_shape", {weight_tensor.dims->data[1], weight_tensor.dims->data[2]});
+      node_attributes.emplace_back(mwnn_attr_kernel_shape);
 
       int activation_type;
       if(conv_params->activation == ::tflite::ActivationFunctionType_NONE)
@@ -114,8 +123,6 @@ MWNNGraph::MWNNGraph(TfLiteContext* context, std::vector<int> subgraph_nodes_) {
       if(conv_params->padding == kTfLitePaddingSame) {
         const int input_tensor_id = node->inputs->data[0];
         const auto& input_tensor = context->tensors[input_tensor_id];
-        const int weight_tensor_id = node->inputs->data[1];
-        const auto& weight_tensor = context->tensors[weight_tensor_id];
 
         int in_height = input_tensor.dims->data[1];
         int in_width = input_tensor.dims->data[2];
@@ -149,14 +156,19 @@ MWNNGraph::MWNNGraph(TfLiteContext* context, std::vector<int> subgraph_nodes_) {
     }
     else if (op_type == kTfLiteBuiltinDepthwiseConv2d) {
       node_op_type = "DepthwiseConv";
-      node_name = node_op_type + std::to_string(node_index);
+      node_name = node_op_type + std::to_string(subgraph_nodes_[node_index]);
       const TfLiteDepthwiseConvParams* depthwise_conv_params = reinterpret_cast<const TfLiteDepthwiseConvParams*>(node->builtin_data);
+      const int weight_tensor_id = node->inputs->data[1];
+      const auto& weight_tensor = context->tensors[weight_tensor_id];
 
       ::metawarenn::MWNNAttribute mwnn_attr_dilate("dilations", {depthwise_conv_params->dilation_height_factor, depthwise_conv_params->dilation_width_factor});
       node_attributes.emplace_back(mwnn_attr_dilate);
       ::metawarenn::MWNNAttribute mwnn_attr_stride("strides", {depthwise_conv_params->stride_height, depthwise_conv_params->stride_width});
       node_attributes.emplace_back(mwnn_attr_stride);
-
+      ::metawarenn::MWNNAttribute mwnn_attr_kernel_shape("kernel_shape", {weight_tensor.dims->data[1], weight_tensor.dims->data[2]});
+      node_attributes.emplace_back(mwnn_attr_kernel_shape);
+      ::metawarenn::MWNNAttribute mwnn_attr_group("group", {weight_tensor.dims->data[3]});
+      node_attributes.emplace_back(mwnn_attr_group);
       int activation_type;
       if(depthwise_conv_params->activation == ::tflite::ActivationFunctionType_NONE)
         activation_type = ActivationType::Activation_None;
@@ -206,23 +218,29 @@ MWNNGraph::MWNNGraph(TfLiteContext* context, std::vector<int> subgraph_nodes_) {
     }
     else if (op_type == kTfLiteBuiltinAveragePool2d) {
       node_op_type = "GlobalAveragePool";
-      node_name = node_op_type + std::to_string(node_index);
+      node_name = node_op_type + std::to_string(subgraph_nodes_[node_index]);
     }
     else if (op_type == kTfLiteBuiltinAdd) {
       node_op_type = "Add";
-      node_name = node_op_type + std::to_string(node_index);
+      node_name = node_op_type + std::to_string(subgraph_nodes_[node_index]);
     }
     else if (op_type == kTfLiteBuiltinRelu) {
       node_op_type = "Relu";
-      node_name = node_op_type + std::to_string(node_index);
+      node_name = node_op_type + std::to_string(subgraph_nodes_[node_index]);
     }
     else if (op_type == kTfLiteBuiltinReshape) {
       node_op_type = "Reshape";
-      node_name = node_op_type + std::to_string(node_index);
+      node_name = node_op_type + std::to_string(subgraph_nodes_[node_index]);
+      const TfLiteReshapeParams* reshape_params = reinterpret_cast<const TfLiteReshapeParams*>(node->builtin_data);
+      ::metawarenn::MWNNAttribute mwnn_attr_shape("shape", {reshape_params->shape[0], reshape_params->shape[1]});
+      node_attributes.emplace_back(mwnn_attr_shape);
     }
     else if (op_type == kTfLiteBuiltinSoftmax) {
       node_op_type = "Softmax";
-      node_name = node_op_type + std::to_string(node_index);
+      node_name = node_op_type + std::to_string(subgraph_nodes_[node_index]);
+      const TfLiteSoftmaxParams* softmax_params = reinterpret_cast<const TfLiteSoftmaxParams*>(node->builtin_data);
+      ::metawarenn::MWNNAttribute mwnn_attr_beta("beta", {(int32_t)softmax_params->beta});
+      node_attributes.emplace_back(mwnn_attr_beta);
     }
     else {
       std::cout << "\n Unsupported op_type: " << op_type;
@@ -269,11 +287,12 @@ MWNNGraph::MWNNGraph(TfLiteContext* context, std::vector<int> subgraph_nodes_) {
 
 #if GLOW
 //GLOWConstructor
-MWNNGraph::MWNNGraph(Function *F) {
-  name = std::string(F->getName());
+MWNNGraph::MWNNGraph(Function *F, std::string subgraph_name) {
+  name = subgraph_name;
   LOG(INFO) << "Function name: " << name;
   GraphPostOrderVisitor visitor(*F);
   auto node_list = visitor.getPostOrder();
+  auto global_output_name = "";
   for (auto *node : node_list) {
       LOG(INFO) << "==============================================================================================================";
       std::string node_name;
@@ -358,6 +377,8 @@ MWNNGraph::MWNNGraph(Function *F) {
             node_attributes.emplace_back(mwnn_attr_group);
             metawarenn::MWNNAttribute mwnn_attribute("activation", {0});
             node_attributes.emplace_back(mwnn_attribute);
+            metawarenn::MWNNAttribute mwnn_attr_kernel_shape("kernel_shape", {(int)filterDims.h, (int)filterDims.w});
+            node_attributes.emplace_back(mwnn_attr_kernel_shape);
             auto output_name = conv_node->getResult().generateNodeOutputName(true);
             node_outputs.emplace_back(output_name);
             LOG(INFO) << "output_name: " << output_name;
@@ -446,6 +467,7 @@ MWNNGraph::MWNNGraph(Function *F) {
         mwnn_nodes.emplace_back(mwnn_node);
         auto op_node = mwnn_node.get_node();
         mwnn_graph_nodes[mwnn_node.get_name()] = std::move(op_node);
+        global_output_name = node_outputs[0].c_str();
       }
   }
   // Graph input and output handling
@@ -454,28 +476,35 @@ MWNNGraph::MWNNGraph(Function *F) {
   auto &last_node = nodes.back();
   auto input_name = std::string(first_node.getNthInput(0).getNode()->getName());
   auto output_name = std::string(last_node.getNthResult(0).getNode()->getName());
-  ip_name = input_name;
-  op_name = output_name;
-  for (auto *v : F->getParent()->getPlaceholders()) {
-    auto glow_dims = v->getType()->dims();
-    auto data_type = v->getType()->getElementType();
+  for (auto &V : F->getParent()->getPlaceholders()) {
+    if (!usedInFunction(V, F)) {
+      continue;
+    }
+
+    auto glow_dims = V->getType()->dims();
+    auto data_type = V->getType()->getElementType();
     int size = glow_dims.size();
     std::vector<int> dims(size);
-    for(int i = 0; i < size; i++)
-    {
-      dims[i] = int(glow_dims[i]);
-    }
-    if(v->getName().equals(input_name))
-    {
-      metawarenn::MWNNValueInfo mwnn_input(input_name, dims, data_type);
-      mwnn_inputs.emplace_back(mwnn_input);
-      mwnn_initializer_names.insert(input_name);
-    }
-    else
-    {
-      metawarenn::MWNNValueInfo mwnn_output(input_name, dims, data_type);
+    // Input dims from NCHW to NHWC
+    dims[1] = int(glow_dims[3]);
+    dims[3] = int(glow_dims[1]);
+    dims[2] = int(glow_dims[2]);
+    dims[0] = int(glow_dims[0]);
+    if (getOutputSave(F, V)) {
+      metawarenn::MWNNValueInfo mwnn_output(global_output_name, dims, data_type);
       mwnn_outputs.emplace_back(mwnn_output);
-      mwnn_initializer_names.insert(output_name);
+      op_name = global_output_name;
+      //Fills Graph Output Tensor Details - Name, Dims
+      MWNNTensor mwnn_op_tensor(mwnn_output.get_name(), mwnn_output.get_type(), mwnn_output.get_dims());
+      mwnn_graph_op_tensors.emplace_back(mwnn_op_tensor);
+    }
+    else if(V->getName().equals(input_name)) {
+      metawarenn::MWNNValueInfo mwnn_input(V->getName(), dims, data_type);
+      mwnn_inputs.emplace_back(mwnn_input);
+      ip_name = V->getName();
+      //Fills Graph Input Tensor Details - Name, Dims
+      MWNNTensor mwnn_ip_tensor(mwnn_input.get_name(), mwnn_input.get_type(), mwnn_input.get_dims());
+      mwnn_graph_ip_tensors.emplace_back(mwnn_ip_tensor);
     }
   }
 }

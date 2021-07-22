@@ -17,10 +17,10 @@ class MWNNGraph {
     MWNNGraph(GraphProto& onnx_graph_proto, std::string graph_name);
     #endif
     #if TFLITE
-    MWNNGraph(TfLiteContext* context, std::vector<int> subgraph_nodes_);
+    MWNNGraph(TfLiteContext* context, std::vector<int> subgraph_nodes_, std::string subgraph_name);
     #endif
     #if GLOW
-    MWNNGraph(Function *F);
+    MWNNGraph(Function *F, std::string subgraph_name);
     #endif
     #if TVM
     MWNNGraph(std::vector<JSONGraphNode> graph_nodes_, std::string graph_name);
@@ -41,52 +41,40 @@ class MWNNGraph {
       return *it;
     }
     void remove_initializer_names(std::string name){
-      std::cout << "\n mwnn_initializer_names size before: " << mwnn_initializer_names.size();
       auto it = mwnn_initializer_names.find(name);
       if(it != mwnn_initializer_names.end())
         mwnn_initializer_names.erase(it);
-      std::cout << "\n mwnn_initializer_names size after: " << mwnn_initializer_names.size();
     }
     void remove_initializer_tensor(std::string name){
-      std::cout << "\n mwnn_initializer_tensors size before: " << mwnn_initializer_tensors.size();
       auto it = std::find_if(
       std::begin(mwnn_initializer_tensors), std::end(mwnn_initializer_tensors), [&](MWNNTensor& tensor) {
           return tensor.get_name() == name;
       });
       mwnn_initializer_tensors.erase(it);
-      std::cout << "\n mwnn_initializer_tensors size after: " << mwnn_initializer_tensors.size();
     }
     void remove_nodes(std::string name){
-      std::cout << "\n mwnn_nodes size before: " << mwnn_nodes.size();
       auto it = std::find_if(
       std::begin(mwnn_nodes), std::end(mwnn_nodes), [&](MWNNNode& node) {
           return node.get_name() == name;
       });
       mwnn_nodes.erase(it);
-      std::cout << "\n mwnn_nodes size after: " << mwnn_nodes.size();
     }
      void remove_inputs(std::string name){
-      std::cout << "\n mwnn_inputs size before: " << mwnn_inputs.size();
       auto it = std::find_if(
       std::begin(mwnn_inputs), std::end(mwnn_inputs), [&](MWNNValueInfo& valueinfo) {
           return valueinfo.get_name() == name;
       });
       mwnn_inputs.erase(it);
-      std::cout << "\n mwnn_inputs size after: " << mwnn_inputs.size();
     }
      void remove_outputs(std::string name){
-      std::cout << "\n mwnn_outputs size before: " << mwnn_outputs.size();
       auto it = std::find_if(
       std::begin(mwnn_outputs), std::end(mwnn_outputs), [&](MWNNValueInfo& valueinfo) {
           return valueinfo.get_name() == name;
       });
       mwnn_outputs.erase(it);
-      std::cout << "\n mwnn_outputs size after: " << mwnn_outputs.size();
     }
      void remove_graph_nodes(std::string name){
-      std::cout << "\n mwnn_graph_nodes size before: " << mwnn_graph_nodes.size();
       mwnn_graph_nodes.erase(name);
-      std::cout << "\n mwnn_graph_nodes size after: " << mwnn_graph_nodes.size();
     }
     void update_node_inputs(std::string node_name, std::string ip_name, int index) {
       auto it = std::find_if(
@@ -107,6 +95,9 @@ class MWNNGraph {
       std::begin(mwnn_nodes), std::end(mwnn_nodes), [&](MWNNNode& node) {
           return node.get_name() == node_name;
       });
+      if (it == std::end(mwnn_nodes)) {
+          std::cout << "\n ERROR : End of Nodes!!! - Couldn't find node" << name << " to update attribute!!!";
+      }
       return it->update_attribute_value(attr_name, value);
     }
     void update_initializer_tensors(std::string tensor_name, std::vector<int> n_dims, std::vector<float> n_tensor) {
@@ -115,6 +106,20 @@ class MWNNGraph {
           return tensor.get_name() == tensor_name;
       });
       return it->update_tensor(n_dims, n_tensor);
+    }
+    void update_initializer_index(std::string tensor_name, uint32_t value) {
+      auto it = std::find_if(
+      std::begin(mwnn_initializer_tensors), std::end(mwnn_initializer_tensors), [&](MWNNTensor& tensor) {
+          return tensor.get_name() == tensor_name;
+      });
+      return it->set_index(value);
+    }
+    void update_initializer_offset(std::string tensor_name, uint32_t offset) {
+      auto it = std::find_if(
+      std::begin(mwnn_initializer_tensors), std::end(mwnn_initializer_tensors), [&](MWNNTensor& tensor) {
+          return tensor.get_name() == tensor_name;
+      });
+      return it->set_offset(offset);
     }
     void update_input_tensors(std::unordered_map<std::string, float*> graph_inputs) {
       for (auto it = mwnn_graph_ip_tensors.begin(); it != mwnn_graph_ip_tensors.end(); ++it) {
@@ -164,8 +169,6 @@ class MWNNGraph {
     std::vector<MWNNNode> mwnn_nodes;
     std::vector<MWNNValueInfo> mwnn_inputs;
     std::vector<MWNNValueInfo> mwnn_outputs;
-    friend class boost::serialization::access;
-    template <typename Ar> void serialize(Ar& ar, unsigned) { ar & name & ip_name & op_name & mwnn_nodes & mwnn_initializer_tensors & mwnn_inputs & mwnn_outputs; }
 };
 
 } //namespace metawarenn

@@ -305,18 +305,6 @@ void convert_to_mwnn_format(MWNNGraph mwnn_graph, std::unordered_map<std::string
     {}
     else if(op_type == "Unsqueeze")
     {}
-    else if(op_type == "Mean")
-    {}
-    else if(op_type == "Split")
-    {}
-    else if(op_type == "Pad")
-    {}
-    else if(op_type == "StridedSlice")
-    {}
-    else if(op_type == "Mean")
-    {}
-    else if(op_type == "FullyConnected")
-    {}
   }
   //To fill the graph output layer value in the passed argument
   for (auto g_op : graph_outputs) {

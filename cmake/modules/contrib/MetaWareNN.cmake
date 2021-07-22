@@ -21,9 +21,12 @@ if(USE_METAWARENN_CODEGEN STREQUAL "ON")
   list(APPEND COMPILER_SRCS ${METAWARENN_RELAY_CONTRIB_SRC})
   list(APPEND COMPILER_SRCS ${JSON_RELAY_CONTRIB_SRC})
 
-  file(GLOB_RECURSE METAWARENN_LIB_HDR src/relay/backend/contrib/metawarenn/metawarenn_lib/*.h)
-  file(GLOB_RECURSE METAWARENN_LIB_SRC src/relay/backend/contrib/metawarenn/metawarenn_lib/*.cc)
-  list(APPEND RUNTIME_SRCS ${METAWARENN_LIB_HDR})
+  file(GLOB METAWARENN_LIB_SRC src/runtime/contrib/metawarenn/metawarenn_lib/*.cc
+    src/runtime/contrib/metawarenn/metawarenn_lib/op/*.cc
+    src/runtime/contrib/metawarenn/metawarenn_lib/optimizer/*.cc
+    src/runtime/contrib/metawarenn/metawarenn_lib/kernels/*.cc
+    src/runtime/contrib/metawarenn/metawarenn_lib/kernels/helpers/*.cc)
+
   list(APPEND RUNTIME_SRCS ${METAWARENN_LIB_SRC})
   file(GLOB METAWARENN_CONTRIB_SRC src/runtime/contrib/metawarenn/metawarenn_json_runtime.cc)
   list(APPEND RUNTIME_SRCS ${METAWARENN_CONTRIB_SRC})

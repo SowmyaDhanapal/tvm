@@ -32,7 +32,7 @@
 #include "../json/json_node.h"
 #include "../json/json_runtime.h"
 
-#include "metawarenn_lib/metawarenn_graph.cc"
+#include "metawarenn_lib/metawarenn_graph.h"
 #include "metawarenn_lib/executable_network/metawarenn_executable_graph.h"
 
 namespace tvm {
