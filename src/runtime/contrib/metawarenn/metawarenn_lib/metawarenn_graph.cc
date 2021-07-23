@@ -594,13 +594,13 @@ MWNNGraph::MWNNGraph(std::vector<JSONGraphNode> graph_nodes_, std::string graph_
         std::cout << "\n Unsupported Op in MetaWareNN backend : " << node.GetOpName();
         exit(1);
       }
-      std::cout << "\n ================================Node=============================\n";
+      /*std::cout << "\n ================================Node=============================\n";
       std::cout << "\n Name : " << node_name;
       std::cout << "\n Type : " << node_op_type;
       for (auto nip: node_inputs)
         std::cout << "\n Inputs : " << nip;
       for (auto nop: node_outputs)
-        std::cout << "\n Outputs : " << nop;
+        std::cout << "\n Outputs : " << nop;*/
 
       MWNNNode mwnn_node(node_name, node_op_type, node_attributes, node_inputs, node_outputs);
       mwnn_nodes.emplace_back(mwnn_node);

@@ -62,10 +62,12 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     SetupConstants(consts);
     BuildMetaWareNNGraph();
     ApplyPasses();
+    mwnn_exe_graph_ = std::make_shared<metawarenn::MWNNExecutableGraph>(*mwnn_graph_);
   }
 
   void Run() override {
     std::cout << "\n In MetaWareNN RUNN!!!";
+    mwnn_exe_graph_->runGraph();
   }
 
  private:

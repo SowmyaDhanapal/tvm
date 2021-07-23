@@ -25,7 +25,8 @@ if(USE_METAWARENN_CODEGEN STREQUAL "ON")
     src/runtime/contrib/metawarenn/metawarenn_lib/op/*.cc
     src/runtime/contrib/metawarenn/metawarenn_lib/optimizer/*.cc
     src/runtime/contrib/metawarenn/metawarenn_lib/kernels/*.cc
-    src/runtime/contrib/metawarenn/metawarenn_lib/kernels/helpers/*.cc)
+    src/runtime/contrib/metawarenn/metawarenn_lib/kernels/helpers/*.cc
+    src/runtime/contrib/metawarenn/metawarenn_lib/executable_network/*.cc)
 
   list(APPEND RUNTIME_SRCS ${METAWARENN_LIB_SRC})
   file(GLOB METAWARENN_CONTRIB_SRC src/runtime/contrib/metawarenn/metawarenn_json_runtime.cc)
