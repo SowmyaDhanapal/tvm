@@ -14,12 +14,6 @@ MWNNTensor::MWNNTensor(TensorProto& onnx_tensor_proto) {
   set_tensor(onnx_tensor_proto);
 }
 
-MWNNTensor::MWNNTensor(std::string t_name, int type, std::vector<int> t_shape) {
-  name = t_name;
-  t_type = (ElementType::element_type)type;
-  dims = t_shape;
-}
-
 void MWNNTensor::set_tensor(TensorProto& onnx_tensor_proto) {
   switch (in_type) {
     case onnx::TensorProto_DataType_FLOAT:
@@ -77,4 +71,10 @@ MWNNTensor::MWNNTensor(std::string m_name, std::vector<int> m_dims, int m_type, 
     tensor = m_tensor;
 }
 #endif
+
+MWNNTensor::MWNNTensor(std::string t_name, int type, std::vector<int> t_shape) {
+  name = t_name;
+  t_type = (ElementType::element_type)type;
+  dims = t_shape;
+}
 } //namespace metawarenn

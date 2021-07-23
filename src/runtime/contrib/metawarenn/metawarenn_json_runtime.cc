@@ -33,7 +33,9 @@
 #include "../json/json_runtime.h"
 
 #include "metawarenn_lib/metawarenn_graph.h"
+#include "metawarenn_lib/optimizer/pass_manager.h"
 #include "metawarenn_lib/executable_network/metawarenn_executable_graph.h"
+#define CHW_TO_HWC 0
 
 namespace tvm {
 namespace runtime {
@@ -59,6 +61,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     // Setup constants entries for weights.
     SetupConstants(consts);
     BuildMetaWareNNGraph();
+    ApplyPasses();
   }
 
   void Run() override {
@@ -94,6 +97,49 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     }
   }
 
+  void ApplyPasses() {
+    ::metawarenn::optimizer::PassManager manager;
+    auto node_list = mwnn_graph_->get_graph_nodes();
+    if(CHW_TO_HWC)
+    {
+      for (auto g_t : mwnn_graph_->get_graph_initializers()) {
+        if(g_t.get_dims().size() == 4) {
+          std::cout << "\n Name : " << g_t.get_name();
+          std::cout << "\t Dims : ";
+          for (auto dim : g_t.get_dims())
+            std::cout << dim << ",";
+          ::metawarenn::optimizer::ConvertLayout cl(mwnn_graph_, g_t, CHW_TO_HWC, 0);
+          manager.register_pass(cl);
+        }
+      }
+      for (auto g_t : mwnn_graph_->get_graph_inputs()) {
+        if(g_t.get_dims().size() == 4) {
+          std::cout << "\n Name : " << g_t.get_name();
+          std::cout << "\t Dims : ";
+          for (auto dim : g_t.get_dims())
+            std::cout << dim << ",";
+          ::metawarenn::optimizer::ConvertLayout cl(mwnn_graph_, g_t, CHW_TO_HWC, 0);
+          manager.register_pass(cl);
+        }
+      }
+    }
+    for (int node_idx = 0; node_idx < mwnn_graph_->get_graph_nodes().size(); node_idx++) {
+      auto g_n = node_list[node_idx];
+      /*if(g_n.get_op_type() == "Reshape") {
+        ::metawarenn::optimizer::RemoveReshape rr(mwnn_graph_, g_n);
+        std::cout << "\n MetaWareNNCC : " << rr.get_name();
+        manager.register_pass(rr);
+      }
+      else*/ if(g_n.get_op_type() == "Relu") {
+        ::metawarenn::optimizer::FuseRelu fr(mwnn_graph_, g_n);
+        //std::cout << "\n MetaWareNNCC : " << fr.get_name();
+        manager.register_pass(fr);
+      }
+    }
+    ::metawarenn::optimizer::CalculateOffset co(mwnn_graph_);
+    manager.register_pass(co);
+    manager.run_passes();
+  }
 };
 
 runtime::Module MetaWareNNJSONRuntimeCreate(String symbol_name, String graph_json,

@@ -644,7 +644,12 @@ void MWNNGraph::set_graph_inputs(std::string ip_name, const JSONGraphNode& node)
     //i loop runs only once in our case
     MWNNValueInfo mwnn_input(ip_name, dims, data_type);
     mwnn_inputs.emplace_back(mwnn_input);
-    mwnn_initializer_names.insert(ip_name);
+    ip_name = mwnn_input.get_name();
+    auto ip_node = mwnn_input.get_node();
+    mwnn_graph_nodes[ip_name] = std::move(ip_node);
+    //Fills Graph Input Tensor Details - Name, Dims
+    MWNNTensor mwnn_ip_tensor(mwnn_input.get_name(), mwnn_input.get_type(), mwnn_input.get_dims());
+    mwnn_graph_ip_tensors.emplace_back(mwnn_ip_tensor);
   }
 }
 
@@ -654,7 +659,10 @@ void MWNNGraph::set_graph_outputs(const JSONGraphNodeEntry& node) {
   /*
     MWNNValueInfo mwnn_output(node_name, dims, data_type);
     mwnn_outputs.emplace_back(mwnn_output);
-    mwnn_initializer_names.insert(node_name);
+    op_name = mwnn_output.get_name();
+    //Fills Graph Output Tensor Details - Name, Dims
+    MWNNTensor mwnn_op_tensor(mwnn_output.get_name(), mwnn_output.get_type(), mwnn_output.get_dims());
+    mwnn_graph_op_tensors.emplace_back(mwnn_op_tensor);
   */
 }
 #endif

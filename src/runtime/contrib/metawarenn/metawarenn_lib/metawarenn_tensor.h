@@ -18,7 +18,6 @@ class MWNNTensor {
     MWNNTensor() = default;
     #if ONNX
     MWNNTensor(TensorProto& onnx_tensor_proto);
-    MWNNTensor(std::string t_name, int type, std::vector<int> t_shape);
     void set_tensor(TensorProto& onnx_tensor_proto);
     #endif
     #if TFLITE
@@ -32,6 +31,7 @@ class MWNNTensor {
     #if TVM
     MWNNTensor(std::string m_name, std::vector<int> m_dims, int m_type, std::vector<float> m_tensor);
     #endif
+    MWNNTensor(std::string t_name, int type, std::vector<int> t_shape);
     std::string get_name() { return name; }
     int get_type() { return int(t_type); }
     void set_index(uint32_t value) { index = value; }

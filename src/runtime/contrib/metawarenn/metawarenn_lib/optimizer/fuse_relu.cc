@@ -27,6 +27,9 @@ void FuseRelu::RunPass() {
         producers.insert(g_n.get_name());
         if(g_n.get_op_type() == "Conv" or g_n.get_op_type() == "DepthwiseConv") {
           graph->update_node_attribute(g_n.get_name(), "activation", 1);
+          graph->remove_nodes(node.get_name());
+          graph->remove_graph_nodes(node.get_name());
+          break;
         }
       }
     }
@@ -37,8 +40,6 @@ void FuseRelu::RunPass() {
   for (auto itr = producers.begin(); itr != producers.end(); ++itr) {
     std::cout << "\nProducers : " << *itr;
   }*/
-  graph->remove_nodes(node.get_name());
-  graph->remove_graph_nodes(node.get_name());
   }
 } //namespace optimizer
 
