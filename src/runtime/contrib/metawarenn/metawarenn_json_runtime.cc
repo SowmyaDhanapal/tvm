@@ -35,6 +35,7 @@
 #include "metawarenn_lib/metawarenn_graph.h"
 #include "metawarenn_lib/optimizer/pass_manager.h"
 #include "metawarenn_lib/executable_network/metawarenn_executable_graph.h"
+#include "metawarenn_lib/mwnn_inference_api/mwnn_inference_api.h"
 #define CHW_TO_HWC 0
 
 namespace tvm {
@@ -60,14 +61,58 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         << "The number of input constants must match the number of required.";
     // Setup constants entries for weights.
     SetupConstants(consts);
+    //Generated MetaWareNN Graph
     BuildMetaWareNNGraph();
+    //Optimize MetaWareNN Graph
     ApplyPasses();
+    //Generate Executable Network
     mwnn_exe_graph_ = std::make_shared<metawarenn::MWNNExecutableGraph>(*mwnn_graph_);
   }
 
   void Run() override {
     std::cout << "\n In MetaWareNN RUNN!!!";
-    mwnn_exe_graph_->runGraph();
+    std::unordered_map<std::string, float*> graph_inputs;
+    std::unordered_map<std::string, float*> graph_outputs;
+
+    for (auto g_ip : mwnn_graph_->get_graph_inputs()) {
+      std::cout << "\n Graph Input  : " << g_ip.get_name();
+      for (size_t i = 0; i < input_nodes_.size(); ++i) {
+        auto nid = input_nodes_[i];
+        if (nodes_[nid].GetOpType() == "input") {
+          auto eid = EntryID(input_nodes_[i], 0);
+          float *input_buf = (float*)(data_entry_[eid]->data);
+          graph_inputs[g_ip.get_name()] = input_buf;
+        }
+      }
+    }
+    for (auto g_op : mwnn_graph_->get_graph_outputs()) {
+      std::cout << "\n Graph Output  : " << g_op.get_name();
+      for (size_t i = 0; i < outputs_.size(); ++i) {
+        auto eid = EntryID(outputs_[i]);
+        size_t buffer_size = GetDataSize(*data_entry_[eid]);
+        std::cout << "\n Output eid : " << eid << " buffer_size : " << buffer_size;
+        float *output_buf = (float*)(data_entry_[eid]->data);
+        graph_outputs[g_op.get_name()] = output_buf;
+      }
+    }
+    // **************************************** Calls to invoke the MetaWareNN Inference API ************************************
+
+    ::metawarenn::MWNNInferenceApi mwapi;
+
+    std::string ip_name = mwnn_graph_->get_graph_ip_name();
+    auto ip_shape = mwnn_graph_->get_graph_ip_tensor()[0].get_dims();
+    mwapi.prepareInput(graph_inputs[ip_name], ip_shape);
+
+    std::string op_name = mwnn_graph_->get_graph_op_name();
+    auto op_shape = mwnn_graph_->get_graph_op_tensor()[0].get_dims();
+    mwapi.prepareOutput(op_shape);
+
+    mwapi.prepareGraph(mwnn_graph_->get_name());
+
+    mwapi.runGraph();
+
+    mwapi.getOutput(graph_outputs[op_name], op_shape);
+    //mwnn_exe_graph_->runGraph();
   }
 
  private:
@@ -90,12 +135,6 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         std::string name = "node_" + std::to_string(nid);
         mwnn_graph_->set_graph_initializers(name, data_entry_[eid]);
       }
-    }
-    // Add outputs.
-    for (size_t i = 0; i < outputs_.size(); ++i) {
-      const auto& node = outputs_[i];
-      std::cout << "\n Node op : " << node.id_;
-      mwnn_graph_->set_graph_outputs(node);
     }
   }
 

@@ -25,8 +25,8 @@ class MWNNGraph {
     #if TVM
     MWNNGraph(std::vector<JSONGraphNode> graph_nodes_, std::string graph_name);
     void set_graph_initializers(std::string const_name, const DLTensor* data);
-    void set_graph_inputs(std::string ip_name, const JSONGraphNode& node);
-    void set_graph_outputs(const JSONGraphNodeEntry& node);
+    void set_graph_inputs(std::string name, const JSONGraphNode& node);
+    void set_graph_outputs(std::string name, std::vector<int> dims, int type);
     #endif
     std::string get_name() { return name; }
     std::string get_graph_ip_name() { return ip_name; }
