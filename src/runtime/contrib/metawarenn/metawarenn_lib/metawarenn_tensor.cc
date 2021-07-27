@@ -38,11 +38,6 @@ MWNNTensor::MWNNTensor(std::string m_name, std::vector<int> m_dims, int m_type, 
     tensor = m_tensor;
     for (auto& it : dims) { std::cout << it << ' '; }
 }
-
-MWNNTensor::MWNNTensor(std::string t_name, std::vector<int> t_shape) {
-  name = t_name;
-  dims = t_shape;
-}
 #endif
 
 #if GLOW
@@ -53,11 +48,6 @@ MWNNTensor::MWNNTensor(std::string m_name, std::vector<int> m_dims, ElemKind m_t
     t_type = ElementType::get_mwnn_type_glow(m_type);
     tensor = m_tensor;
     for (auto& it : dims) { std::cout << it << ' '; }
-}
-
-MWNNTensor::MWNNTensor(std::string t_name, std::vector<int> t_shape) {
-  name = t_name;
-  dims = t_shape;
 }
 #endif
 

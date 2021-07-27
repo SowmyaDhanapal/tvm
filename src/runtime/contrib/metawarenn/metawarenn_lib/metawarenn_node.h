@@ -23,6 +23,12 @@
 #include "op/unsqueeze.h"
 #include "op/gather.h"
 #include "op/shape.h"
+#include "op/split.h"
+#include "op/strided_slice.h"
+#include "op/pad.h"
+#include "op/mean.h"
+#include "op/channel_shuffle.h"
+#include "op/fully_connected.h"
 
 namespace metawarenn {
 
@@ -132,8 +138,26 @@ class MWNNNode {
         return std::make_shared<op::Shape>(name, inputs, outputs);
       }
       else if(op_type == "BatchNorm") {
-        return std::make_shared<op::BatchNormalization>(name, inputs, outputs,
+          return std::make_shared<op::BatchNormalization>(name, inputs, outputs,
                                                         get_attribute_value_float("epsilon")[0]);
+      }
+      else if(op_type == "Split") {
+        return std::make_shared<op::Split>(name, inputs, outputs);
+      }
+      else if(op_type == "Mean") {
+        return std::make_shared<op::Mean>(name, inputs, outputs);
+      }
+      else if(op_type == "Pad") {
+        return std::make_shared<op::Pad>(name, inputs, outputs);
+      }
+      else if(op_type == "StridedSlice") {
+        return std::make_shared<op::StridedSlice>(name, inputs, outputs);
+      }
+      else if(op_type == "ChannelShuffle") {
+        return std::make_shared<op::ChannelShuffle>(name, inputs, outputs);
+      }
+      else if(op_type == "FullyConnected") {
+        return std::make_shared<op::FullyConnected>(name, inputs, outputs);
       }
       else if(op_type == "Reshape") {
         return std::make_shared<op::Reshape>(name, inputs, outputs);
