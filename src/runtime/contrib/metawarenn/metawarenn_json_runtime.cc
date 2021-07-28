@@ -33,6 +33,7 @@
 #include "../json/json_runtime.h"
 
 #include "metawarenn_lib/metawarenn_graph.h"
+#include "metawarenn_lib/metawarenn_utils.h"
 #include "metawarenn_lib/optimizer/pass_manager.h"
 #include "metawarenn_lib/executable_network/metawarenn_executable_graph.h"
 #include "metawarenn_lib/mwnn_inference_api/mwnn_inference_api.h"
@@ -97,7 +98,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     }
     // **************************************** Calls to invoke the MetaWareNN Inference API ************************************
 
-    ::metawarenn::MWNNInferenceApi mwapi;
+    /*::metawarenn::MWNNInferenceApi mwapi;
 
     std::string ip_name = mwnn_graph_->get_graph_ip_name();
     auto ip_shape = mwnn_graph_->get_graph_ip_tensor()[0].get_dims();
@@ -111,7 +112,10 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
 
     mwapi.runGraph();
 
-    mwapi.getOutput(graph_outputs[op_name], op_shape);
+    mwapi.getOutput(graph_outputs[op_name], op_shape);*/
+
+    // ******************************************* Call to invoke the local run function *****************************************
+    ::metawarenn::convert_to_mwnn_format(*mwnn_graph_, graph_inputs, graph_outputs, CHW_TO_HWC);
     //mwnn_exe_graph_->runGraph();
   }
 
@@ -171,9 +175,15 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         std::cout << "\n MetaWareNNCC : " << rr.get_name();
         manager.register_pass(rr);
       }
-      else*/ if(g_n.get_op_type() == "Relu") {
+      else*/
+      if(g_n.get_op_type() == "BatchNorm") {
+        ::metawarenn::optimizer::FuseBatchNorm fbn(mwnn_graph_, g_n);
+        std::cout << "\n MetaWareNNCC : " << fbn.get_name();
+        manager.register_pass(fbn);
+      }
+      else  if(g_n.get_op_type() == "Relu") {
         ::metawarenn::optimizer::FuseRelu fr(mwnn_graph_, g_n);
-        //std::cout << "\n MetaWareNNCC : " << fr.get_name();
+        std::cout << "\n MetaWareNNCC : " << fr.get_name();
         manager.register_pass(fr);
       }
     }
