@@ -7,6 +7,7 @@ namespace metawarenn {
 #if ONNX
 MWNNAttribute::MWNNAttribute(AttributeProto& onnx_attribute_proto) {
   name = onnx_attribute_proto.name();
+  type = ElementType::get_mwnn_type_onnx(in_type);
   set_data(onnx_attribute_proto);
 }
 
@@ -58,12 +59,14 @@ void MWNNAttribute::set_data(AttributeProto& onnx_attribute_proto) {
 MWNNAttribute::MWNNAttribute(std::string m_name, std::vector<int> m_data) {
   name = m_name;
   data = m_data;
+  type = 6;
 }
 
 //TVMConstructor
 MWNNAttribute::MWNNAttribute(std::string m_name, std::vector<float> m_data) {
   name = m_name;
   float_data = m_data;
+  type = 3;
 }
 
 void MWNNAttribute::set_data(int m_data) {

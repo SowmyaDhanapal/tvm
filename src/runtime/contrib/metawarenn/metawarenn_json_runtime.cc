@@ -75,7 +75,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     std::unordered_map<std::string, float*> graph_inputs;
     std::unordered_map<std::string, float*> graph_outputs;
 
-    for (auto g_ip : mwnn_graph_->get_graph_inputs()) {
+    for (auto g_ip : mwnn_graph_->get_graph_ip_tensor()) {
       std::cout << "\n Graph Input  : " << g_ip.get_name();
       for (size_t i = 0; i < input_nodes_.size(); ++i) {
         auto nid = input_nodes_[i];
@@ -86,7 +86,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         }
       }
     }
-    for (auto g_op : mwnn_graph_->get_graph_outputs()) {
+    for (auto g_op : mwnn_graph_->get_graph_op_tensor()) {
       std::cout << "\n Graph Output  : " << g_op.get_name();
       for (size_t i = 0; i < outputs_.size(); ++i) {
         auto eid = EntryID(outputs_[i]);
@@ -153,17 +153,17 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           std::cout << "\t Dims : ";
           for (auto dim : g_t.get_dims())
             std::cout << dim << ",";
-          ::metawarenn::optimizer::ConvertLayout cl(mwnn_graph_, g_t, CHW_TO_HWC, 0);
+          ::metawarenn::optimizer::ConvertLayout cl(mwnn_graph_, g_t, CHW_TO_HWC, 0, true);
           manager.register_pass(cl);
         }
       }
-      for (auto g_t : mwnn_graph_->get_graph_inputs()) {
+      for (auto g_t : mwnn_graph_->get_graph_ip_tensor()) {
         if(g_t.get_dims().size() == 4) {
           std::cout << "\n Name : " << g_t.get_name();
           std::cout << "\t Dims : ";
           for (auto dim : g_t.get_dims())
             std::cout << dim << ",";
-          ::metawarenn::optimizer::ConvertLayout cl(mwnn_graph_, g_t, CHW_TO_HWC, 0);
+          ::metawarenn::optimizer::ConvertLayout cl(mwnn_graph_, g_t, CHW_TO_HWC, 0, false);
           manager.register_pass(cl);
         }
       }

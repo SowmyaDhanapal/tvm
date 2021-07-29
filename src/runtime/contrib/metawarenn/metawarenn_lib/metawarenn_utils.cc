@@ -120,10 +120,11 @@ void convert_to_mwnn_format(MWNNGraph mwnn_graph, std::unordered_map<std::string
       fill_mwnn_tensor_initalizer(inputs[1], mwnn_graph, &conv_wt, &kernel_height, &kernel_width, &channels, is_HWC);
       auto input = g_n.get_inputs()[0];
       // Handles the initial graph input to the first conv node and updates tensor map
-      if(input == mwnn_graph.get_graph_ip_name())
-      {
-        fill_mwnn_tensor_input(mwnn_graph.get_graph_ip_tensor()[0], &input_tensor);
-        tensor_map.insert(std::pair<std::string, mli_tensor>(input, input_tensor));
+      for (auto ip_name : mwnn_graph.get_graph_ip_names()) {
+        if(input == ip_name) {
+          fill_mwnn_tensor_input(mwnn_graph.get_graph_ip_tensor()[0], &input_tensor);
+          tensor_map.insert(std::pair<std::string, mli_tensor>(input, input_tensor));
+        }
       }
       input_tensor = (tensor_map.find(input))->second;
       // Output buffer size calculation

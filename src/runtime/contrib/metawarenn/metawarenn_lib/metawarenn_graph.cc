@@ -22,11 +22,11 @@ MWNNGraph::MWNNGraph(GraphProto& onnx_graph_proto, std::string graph_name) {
   }
   for (auto ip_value_info_proto : onnx_graph_proto.input()) {
     MWNNValueInfo mwnn_input(ip_value_info_proto);
-    mwnn_inputs.emplace_back(mwnn_input);
     if(mwnn_initializer_names.count(mwnn_input.get_name()))
       continue;
     else {
-      ip_name = mwnn_input.get_name();
+      std::string ip_name = mwnn_input.get_name();
+      mwnn_graph_ip_names.emplace_back(ip_name);
       auto ip_node = mwnn_input.get_node();
       mwnn_graph_nodes[ip_name] = std::move(ip_node);
       //Fills Graph Input Tensor Details - Name, Dims
@@ -36,8 +36,7 @@ MWNNGraph::MWNNGraph(GraphProto& onnx_graph_proto, std::string graph_name) {
   }
   for (auto op_value_info_proto : onnx_graph_proto.output()) {
     MWNNValueInfo mwnn_output(op_value_info_proto);
-    mwnn_outputs.emplace_back(mwnn_output);
-    op_name = mwnn_output.get_name();
+    mwnn_graph_op_names.emplace_back(mwnn_output.get_name());
     //Fills Graph Output Tensor Details - Name, Dims
     MWNNTensor mwnn_op_tensor(mwnn_output.get_name(), mwnn_output.get_type(), mwnn_output.get_dims());
     mwnn_graph_op_tensors.emplace_back(mwnn_op_tensor);
@@ -61,8 +60,7 @@ MWNNGraph::MWNNGraph(TfLiteContext* context, std::vector<int> subgraph_nodes_, s
   const auto& input_tensor = context->tensors[tensor_id];
   std::vector<int> dims_ip_vec(input_tensor.dims->data, input_tensor.dims->data + input_tensor.dims->size);
   ::metawarenn::MWNNValueInfo mwnn_input(input_tensor.name, dims_ip_vec, input_tensor.type);
-  mwnn_inputs.emplace_back(mwnn_input);
-  ip_name = input_tensor.name;
+  mwnn_graph_ip_names.emplace_back(input_tensor.name);
   auto ip_node = mwnn_input.get_node();
   mwnn_graph_nodes[mwnn_input.get_name()] = std::move(ip_node);
   //Fills Graph Input Tensor Details - Name, Dims
@@ -75,8 +73,7 @@ MWNNGraph::MWNNGraph(TfLiteContext* context, std::vector<int> subgraph_nodes_, s
   const auto& output_tensor = context->tensors[tensor_id];
   std::vector<int> dims_op_vec(output_tensor.dims->data, output_tensor.dims->data + output_tensor.dims->size);
   ::metawarenn::MWNNValueInfo mwnn_output(output_tensor.name, dims_op_vec, output_tensor.type);
-  mwnn_outputs.emplace_back(mwnn_output);
-  op_name = output_tensor.name;
+  mwnn_graph_op_names.emplace_back(output_tensor.name);
   //Fills Graph Output Tensor Details - Name, Dims
   MWNNTensor mwnn_op_tensor(mwnn_output.get_name(), mwnn_output.get_type(), mwnn_output.get_dims());
   mwnn_graph_op_tensors.emplace_back(mwnn_op_tensor);
@@ -394,7 +391,6 @@ MWNNGraph::MWNNGraph(TfLiteContext* context, std::vector<int> subgraph_nodes_, s
           mwnn_graph_nodes[mwnn_tensor.get_name()] = std::move(const_node);
 
           ::metawarenn::MWNNValueInfo mwnn_input(input_tensor.name, dims_vec, input_tensor.type);
-          mwnn_inputs.emplace_back(mwnn_input);
           mwnn_initializer_names.insert(input_tensor.name);
       }
     }
@@ -869,16 +865,14 @@ MWNNGraph::MWNNGraph(Function *F, std::string subgraph_name) {
     dims[0] = int(glow_dims[0]);
     if (getOutputSave(F, V)) {
       metawarenn::MWNNValueInfo mwnn_output(global_output_name, dims, data_type);
-      mwnn_outputs.emplace_back(mwnn_output);
-      op_name = global_output_name;
+      mwnn_graph_op_names.emplace_back(global_output_name);
       //Fills Graph Output Tensor Details - Name, Dims
       MWNNTensor mwnn_op_tensor(mwnn_output.get_name(), mwnn_output.get_type(), mwnn_output.get_dims());
       mwnn_graph_op_tensors.emplace_back(mwnn_op_tensor);
     }
     else if(V->getName().equals(input_name)) {
       metawarenn::MWNNValueInfo mwnn_input(V->getName(), dims, data_type);
-      mwnn_inputs.emplace_back(mwnn_input);
-      ip_name = V->getName();
+      mwnn_graph_ip_names.emplace_back(V->getName());
       //Fills Graph Input Tensor Details - Name, Dims
       MWNNTensor mwnn_ip_tensor(mwnn_input.get_name(), mwnn_input.get_type(), mwnn_input.get_dims());
       mwnn_graph_ip_tensors.emplace_back(mwnn_ip_tensor);
@@ -1033,8 +1027,8 @@ void MWNNGraph::set_graph_inputs(std::string name, const JSONGraphNode& node) {
     //Update the node name by assuming each graph input has unique JSONGraphNode
     //i loop runs only once in our case
     MWNNValueInfo mwnn_input(name, dims, data_type);
-    mwnn_inputs.emplace_back(mwnn_input);
-    ip_name = mwnn_input.get_name();
+    std::string ip_name = mwnn_input.get_name();
+    mwnn_graph_ip_names.emplace_back(ip_name);
     auto ip_node = mwnn_input.get_node();
     mwnn_graph_nodes[ip_name] = std::move(ip_node);
     //Fills Graph Input Tensor Details - Name, Dims
@@ -1045,8 +1039,7 @@ void MWNNGraph::set_graph_inputs(std::string name, const JSONGraphNode& node) {
 
 void MWNNGraph::set_graph_outputs(std::string name, std::vector<int> dims, int type) {
     MWNNValueInfo mwnn_output(name, dims, type);
-    mwnn_outputs.emplace_back(mwnn_output);
-    op_name = mwnn_output.get_name();
+    mwnn_graph_op_names.emplace_back(mwnn_output.get_name());
     //Fills Graph Output Tensor Details - Name, Dims
     MWNNTensor mwnn_op_tensor(mwnn_output.get_name(), mwnn_output.get_type(), mwnn_output.get_dims());
     mwnn_graph_op_tensors.emplace_back(mwnn_op_tensor);
