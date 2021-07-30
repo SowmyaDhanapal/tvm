@@ -43,11 +43,29 @@ def _register_external_op_helper(op_name, supported=True):
 
     return _func_wrapper
 
-_register_external_op_helper("add")
 _register_external_op_helper("nn.conv2d")
+_register_external_op_helper("nn.bias_add")
 _register_external_op_helper("nn.batch_norm")
-_register_external_op_helper("nn.global_avg_pool2d")
 _register_external_op_helper("nn.relu")
+_register_external_op_helper("nn.global_avg_pool2d")
+_register_external_op_helper("nn.max_pool2d")
+_register_external_op_helper("nn.avg_pool2d")
+_register_external_op_helper("nn.dense")
+_register_external_op_helper("nn.batch_flatten")
+_register_external_op_helper("nn.lrn")
+_register_external_op_helper("add")
+_register_external_op_helper("multiply")
+_register_external_op_helper("max")
+_register_external_op_helper("maximum")
+_register_external_op_helper("minimum")
+_register_external_op_helper("subtract")
+_register_external_op_helper("exp")
+_register_external_op_helper("sum")
+_register_external_op_helper("divide")
+_register_external_op_helper("transpose")
+_register_external_op_helper("clip")
+_register_external_op_helper("squeeze")
+_register_external_op_helper("concatenate")
 _register_external_op_helper("reshape")
 
 def partition_for_metawarenn(mod, params=None):

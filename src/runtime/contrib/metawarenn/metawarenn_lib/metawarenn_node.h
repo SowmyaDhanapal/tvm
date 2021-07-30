@@ -29,6 +29,16 @@
 #include "op/mean.h"
 #include "op/channel_shuffle.h"
 #include "op/fully_connected.h"
+#include "op/dense.h"
+#include "op/batch_flatten.h"
+#include "op/bias_add.h"
+#include "op/max.h"
+#include "op/subtract.h"
+#include "op/exp.h"
+#include "op/sum.h"
+#include "op/divide.h"
+#include "op/minimum.h"
+#include "op/maximum.h"
 
 namespace metawarenn {
 
@@ -117,6 +127,13 @@ class MWNNNode {
       else if(op_type == "AveragePool") {
         return std::make_shared<op::AvgPool>(name, inputs, outputs);
       }
+      else if(op_type == "Dense") {
+        return std::make_shared<op::Dense>(name, inputs, outputs);
+      }
+      else if(op_type == "BatchFlatten") {
+        return std::make_shared<op::BatchFlatten>(name, inputs, outputs);
+      }
+
       else if(op_type == "Concat") {
         return std::make_shared<op::Concat>(name, inputs, outputs);
       }
@@ -142,8 +159,29 @@ class MWNNNode {
           return std::make_shared<op::BatchNormalization>(name, inputs, outputs,
                                                         get_attribute_value_float("epsilon")[0]);
       }
+      else if(op_type == "BiasAdd") {
+          return std::make_shared<op::BiasAdd>(name, inputs, outputs);
+      }
+      else if(op_type == "Max") {
+          return std::make_shared<op::Max>(name, inputs, outputs);
+      }
+      else if(op_type == "Subtract") {
+          return std::make_shared<op::Subtract>(name, inputs, outputs);
+      }
+      else if(op_type == "Exp") {
+          return std::make_shared<op::Exp>(name, inputs, outputs);
+      }
+      else if(op_type == "Divide") {
+          return std::make_shared<op::Divide>(name, inputs, outputs);
+      }
       else if(op_type == "Split") {
         return std::make_shared<op::Split>(name, inputs, outputs);
+      }
+      else if(op_type == "Maximum") {
+        return std::make_shared<op::Maximum>(name, inputs, outputs);
+      }
+      else if(op_type == "Minimum") {
+        return std::make_shared<op::Minimum>(name, inputs, outputs);
       }
       else if(op_type == "Mean") {
         return std::make_shared<op::Mean>(name, inputs, outputs);

@@ -960,6 +960,110 @@ MWNNGraph::MWNNGraph(std::vector<JSONGraphNode> graph_nodes_, std::string graph_
         node_op_type = "GlobalAveragePool";
         node_name = node_op_type + std::to_string(layer_count++);
       }
+      else if (node.GetOpName() == "nn.avg_pool2d" || node.GetOpName() == "nn.max_pool2d") {
+        node_op_type = node.GetOpName() == "AveragePool" ? "nn.avg_pool2d" : "MaxPool";
+        node_name = node_op_type + std::to_string(layer_count++);
+        auto pool_size = node.GetAttr<std::vector<std::string>>("pool_size");
+        auto padding = node.GetAttr<std::vector<std::string>>("padding");
+        auto strides = node.GetAttr<std::vector<std::string>>("strides");
+        MWNNAttribute mwnn_attr_pool_size("pool_size", std::vector<int>({std::stoi(pool_size[0]), std::stoi(pool_size[1])}));
+        node_attributes.emplace_back(mwnn_attr_pool_size);
+        MWNNAttribute mwnn_attr_pad("pads", std::vector<int>({std::stoi(padding[0]), std::stoi(padding[1]), std::stoi(padding[2]), std::stoi(padding[3])}));
+        node_attributes.emplace_back(mwnn_attr_pad);
+        MWNNAttribute mwnn_attr_stride("strides", std::vector<int>({std::stoi(strides[0]), std::stoi(strides[1])}));
+        node_attributes.emplace_back(mwnn_attr_stride);
+      }
+      else if (node.GetOpName() == "nn.lrn") {
+        node_op_type = "LRN";
+        node_name = node_op_type + std::to_string(layer_count++);
+        auto alpha = node.GetAttr<std::vector<std::string>>("alpha");
+        auto beta = node.GetAttr<std::vector<std::string>>("beta");
+        auto size = node.GetAttr<std::vector<std::string>>("size");
+        auto axis = node.GetAttr<std::vector<std::string>>("axis");
+        auto bias = node.GetAttr<std::vector<std::string>>("bias");
+        MWNNAttribute mwnn_attr_alpha("alpha", std::vector<int>({std::stoi(alpha[0])}));
+        node_attributes.emplace_back(mwnn_attr_alpha);
+        MWNNAttribute mwnn_attr_beta("beta", std::vector<int>({std::stoi(beta[0])}));
+        node_attributes.emplace_back(mwnn_attr_beta);
+        MWNNAttribute mwnn_attr_size("size", std::vector<int>({std::stoi(size[0])}));
+        node_attributes.emplace_back(mwnn_attr_size);
+        MWNNAttribute mwnn_attr_axis("axis", std::vector<int>({std::stoi(axis[0])}));
+        node_attributes.emplace_back(mwnn_attr_axis);
+        MWNNAttribute mwnn_attr_bias("bias", std::vector<int>({std::stoi(bias[0])}));
+        node_attributes.emplace_back(mwnn_attr_bias);
+      }
+      else if (node.GetOpName() == "nn.batch_flatten") {
+        node_op_type = "BatchFlatten";
+        node_name = node_op_type + std::to_string(layer_count++);
+      }
+      else if (node.GetOpName() == "nn.dense") {
+        node_op_type = "Dense";
+        node_name = node_op_type + std::to_string(layer_count++);
+        /*auto units = node.GetAttr<std::vector<std::string>>("units");
+        MWNNAttribute mwnn_attr_units("units", std::vector<int>({std::stoi(units[0])}));
+        node_attributes.emplace_back(mwnn_attr_units);*/
+      }
+      else if (node.GetOpName() == "nn.bias_add") {
+        node_op_type = "BiasAdd";
+        node_name = node_op_type + std::to_string(layer_count++);
+      }
+      else if (node.GetOpName() == "clip") {
+        node_op_type = "Clip";
+        node_name = node_op_type + std::to_string(layer_count++);
+        auto min = node.GetAttr<std::vector<std::string>>("a_min");
+        MWNNAttribute mwnn_attr_min("min", std::vector<int>({std::stoi(min[0])}));
+        node_attributes.emplace_back(mwnn_attr_min);
+        auto max = node.GetAttr<std::vector<std::string>>("a_max");
+        MWNNAttribute mwnn_attr_max("max", std::vector<int>({std::stoi(max[0])}));
+        node_attributes.emplace_back(mwnn_attr_max);
+      }
+      else if (node.GetOpName() == "squeeze") {
+        node_op_type = "Squeeze";
+        node_name = node_op_type + std::to_string(layer_count++);
+        auto axis = node.GetAttr<std::vector<std::string>>("axis");
+        MWNNAttribute mwnn_attr_axis("axis", std::vector<int>({std::stoi(axis[0])}));
+        node_attributes.emplace_back(mwnn_attr_axis);
+      }
+      else if (node.GetOpName() == "transpose") {
+        node_op_type = "Transpose";
+        node_name = node_op_type + std::to_string(layer_count++);
+      }
+      else if (node.GetOpName() == "concatenate") {
+        node_op_type = "Concat";
+        node_name = node_op_type + std::to_string(layer_count++);
+      }
+      else if (node.GetOpName() == "max") {
+        node_op_type = "Max";
+        node_name = node_op_type + std::to_string(layer_count++);
+      }
+      else if (node.GetOpName() == "subtract") {
+        node_op_type = "Subtract";
+        node_name = node_op_type + std::to_string(layer_count++);
+      }
+      else if (node.GetOpName() == "exp") {
+        node_op_type = "Exp";
+        node_name = node_op_type + std::to_string(layer_count++);
+      }
+      else if (node.GetOpName() == "maximum") {
+        node_op_type = "Maximum";
+        node_name = node_op_type + std::to_string(layer_count++);
+      }
+      else if (node.GetOpName() == "minimum") {
+        node_op_type = "Minimum";
+        node_name = node_op_type + std::to_string(layer_count++);
+      }
+      else if (node.GetOpName() == "sum") {
+        node_op_type = "Sum";
+        node_name = node_op_type + std::to_string(layer_count++);
+      }
+      else if (node.GetOpName() == "divide") {
+        node_op_type = "Divide";
+        node_name = node_op_type + std::to_string(layer_count++);
+      }
+      else if (node.GetOpName() == "multiply") {
+        node_op_type = "Mul";
+        node_name = node_op_type + std::to_string(layer_count++);
+      }
       else if (node.GetOpName() == "reshape") {
         node_op_type = "Reshape";
         node_name = node_op_type + std::to_string(layer_count++);
@@ -1043,7 +1147,7 @@ void MWNNGraph::set_graph_outputs(std::string name, std::vector<int> dims, int t
     //Fills Graph Output Tensor Details - Name, Dims
     MWNNTensor mwnn_op_tensor(mwnn_output.get_name(), mwnn_output.get_type(), mwnn_output.get_dims());
     mwnn_graph_op_tensors.emplace_back(mwnn_op_tensor);
-  
+
 }
 #endif
 } //namespace metawarenn
