@@ -48,7 +48,7 @@ class MWNNNode {
     void set_outputs(std::string name, int index) { outputs[index] = name; }
     std::vector<MWNNAttribute> get_attributes() { return mwnn_attributes; }
 
-    std::vector<int> get_attribute_value(std::string name) {
+    std::vector<int> get_attribute_value_int(std::string name) {
       auto it = std::find_if(
       std::begin(mwnn_attributes), std::end(mwnn_attributes), [&](MWNNAttribute& attribute) {
           return attribute.get_name() == name;
@@ -56,7 +56,7 @@ class MWNNNode {
       if (it == std::end(mwnn_attributes)) {
           std::cout << "\n ERROR : End of Attributes!!! - Couldn't find " << name;
       }
-      return it->get_data();
+      return it->get_int_data();
     }
     std::vector<float> get_attribute_value_float(std::string name) {
       auto it = std::find_if(
@@ -81,17 +81,17 @@ class MWNNNode {
     std::shared_ptr<op::Node> get_node() {
       if(op_type == "Conv") {
         return std::make_shared<op::Conv>(name, inputs, outputs,
-                                          get_attribute_value("dilations"),
-                                          get_attribute_value("strides"),
-                                          get_attribute_value("pads"),
-                                          get_attribute_value("activation")[0]);
+                                          get_attribute_value_int("dilations"),
+                                          get_attribute_value_int("strides"),
+                                          get_attribute_value_int("pads"),
+                                          get_attribute_value_int("activation")[0]);
       }
       else if(op_type == "DepthwiseConv") {
         return std::make_shared<op::DepthwiseConv>(name, inputs, outputs,
-                                                   get_attribute_value("dilations"),
-                                                   get_attribute_value("strides"),
-                                                   get_attribute_value("pads"),
-                                                   get_attribute_value("activation")[0]);
+                                                   get_attribute_value_int("dilations"),
+                                                   get_attribute_value_int("strides"),
+                                                   get_attribute_value_int("pads"),
+                                                   get_attribute_value_int("activation")[0]);
       }
       else if(op_type == "Relu") {
         return std::make_shared<op::Relu>(name, inputs, outputs);

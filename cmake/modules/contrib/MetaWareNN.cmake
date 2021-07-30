@@ -27,10 +27,14 @@ if(USE_METAWARENN_CODEGEN STREQUAL "ON")
     src/runtime/contrib/metawarenn/metawarenn_lib/kernels/*.cc
     src/runtime/contrib/metawarenn/metawarenn_lib/kernels/helpers/*.cc
     src/runtime/contrib/metawarenn/metawarenn_lib/executable_network/*.cc
-    src/runtime/contrib/metawarenn/metawarenn_lib/mwnn_inference_api/*.cc)
+    src/runtime/contrib/metawarenn/metawarenn_lib/mwnn_inference_api/*.cc
+    src/runtime/contrib/metawarenn/metawarenn_lib/mwnnconvert/mwnn_protobuf/cpp_wrapper/*.cc)
 
   list(APPEND RUNTIME_SRCS ${METAWARENN_LIB_SRC})
   file(GLOB METAWARENN_CONTRIB_SRC src/runtime/contrib/metawarenn/metawarenn_json_runtime.cc)
   list(APPEND RUNTIME_SRCS ${METAWARENN_CONTRIB_SRC})
+
+  find_library(MWNN_PB_LIB_DIR NAMES protobuf HINTS metawarenn_inference)
+  list(APPEND TVM_RUNTIME_LINKER_LIBS ${MWNN_PB_LIB_DIR})
 endif()
 

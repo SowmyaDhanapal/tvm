@@ -14,24 +14,24 @@ class ElementType {
     enum class element_type
       {
           //Common Types
-          boolean_,
-          double_,
-          float16_,
-          float_,
-          int8_,
-          int16_,
-          int32_,
-          int64_,
-          uint8_,
+          boolean_,   //0
+          double_,    //1
+          float16_,   //2
+          float_,     //3
+          int8_,      //4
+          int16_,     //5
+          int32_,     //6
+          int64_,     //7
+          uint8_,     //8
           //ONNX & TVM Specific
-          uint16_,
-          uint32_,
-          uint64_,
+          uint16_,    //9
+          uint32_,    //10
+          uint64_,    //11
           //TF Specific
-          string_,
-          complex64_,
+          string_,    //12
+          complex64_, //13
           //Common ONNX & TF Types
-          dynamic_
+          dynamic_    //14
       };
 
     #if ONNX

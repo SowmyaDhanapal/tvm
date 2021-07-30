@@ -1,8 +1,7 @@
+import onnx
 import tvm
 from tvm import relay
-import onnx
 import numpy as np
-
 
 dtype = "float32"
 input_shape = (1, 3, 224, 224)
@@ -10,6 +9,7 @@ onnx_model = onnx.load("/path/to/mobilenetv2-7.onnx")
 mod, params = relay.frontend.from_onnx(onnx_model, shape={'data': input_shape}, dtype=dtype)
 print("Mod : ", type(mod)) #Mod :  <class 'tvm.ir.module.IRModule'>
 print("Params : ", type(params)) #Params :  <class 'dict'>
+
 print("=======================================================================")
 from tvm.relay.op.contrib.metawarenn import partition_for_metawarenn
 mod = partition_for_metawarenn(mod, params)

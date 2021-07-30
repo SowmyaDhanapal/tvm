@@ -58,7 +58,7 @@ void MWNNAttribute::set_data(AttributeProto& onnx_attribute_proto) {
 //TFConstructor, GLOWConstructor & TVMConstructor
 MWNNAttribute::MWNNAttribute(std::string m_name, std::vector<int> m_data) {
   name = m_name;
-  data = m_data;
+  int_data = m_data;
   type = 6;
 }
 
@@ -70,7 +70,7 @@ MWNNAttribute::MWNNAttribute(std::string m_name, std::vector<float> m_data) {
 }
 
 void MWNNAttribute::set_data(int m_data) {
-    data.clear();
-    data.push_back(m_data);
+    int_data.clear();
+    int_data.push_back(m_data);
 }
 } //namespace metawarenn
