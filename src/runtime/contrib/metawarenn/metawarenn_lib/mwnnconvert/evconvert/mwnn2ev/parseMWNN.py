@@ -478,7 +478,7 @@ def parse_Reshape(graphproto, node, node_name, inputs, outputs):
                         if n.name == node.ip_name[1]]
         if shape_tensor != []:
             shape_tensor = shape_tensor[0]
-            shape_info = shape_tensor.int64_data
+            shape_info = [int(n) for n in shape_tensor.float_data]
             if shape_info == []:  # raw_data format
                 shape_info = shape_tensor.float_data
             shape = [int(n) for n in shape_info]

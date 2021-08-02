@@ -107,11 +107,13 @@ class MWNNGraph {
       return it->update_tensor(n_dims, n_tensor);
     }
     void add_initializer_tensor(std::string tensor_name, std::vector<int> n_dims, std::vector<float> n_tensor) {
+      #if TVM
       MWNNTensor mwnn_tensor(tensor_name, n_dims, 2, n_tensor);
       mwnn_initializer_tensors.emplace_back(mwnn_tensor);
       mwnn_initializer_names.insert(mwnn_tensor.get_name());
       auto const_node = mwnn_tensor.get_constant_node();
       mwnn_graph_nodes[mwnn_tensor.get_name()] = std::move(const_node);
+      #endif
     }
     void update_initializer_index(std::string tensor_name, uint32_t value) {
       auto it = std::find_if(

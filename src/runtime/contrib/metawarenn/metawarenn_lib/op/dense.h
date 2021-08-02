@@ -15,6 +15,7 @@ class Dense : public Node {
   private:
     std::vector<std::string> inputs;
     std::vector<std::string> outputs;
+    //std::vector<int> units;
 };
 
 } //namespace op

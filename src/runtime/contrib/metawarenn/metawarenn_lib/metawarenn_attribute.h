@@ -2,6 +2,8 @@
 #define METAWARENN_ATTRIBUTE_H_
 
 #include "metawarenn_common.h"
+#include "metawarenn_element.h"
+
 namespace metawarenn {
 
 class MWNNAttribute {

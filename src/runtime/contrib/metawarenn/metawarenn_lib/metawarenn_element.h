@@ -67,6 +67,25 @@ class ElementType {
                 return element_type::dynamic_;
         }
     }
+
+    static element_type get_mwnn_attr_type_onnx(int onnx_attr_type) {
+        switch (onnx_attr_type) {
+            case onnx::AttributeProto_AttributeType_FLOAT:
+                return element_type::float_;
+            case onnx::AttributeProto_AttributeType_INT:
+                return element_type::int32_;
+            case onnx::AttributeProto_AttributeType_STRING:
+                return element_type::string_;
+            case onnx::AttributeProto_AttributeType_FLOATS:
+                return element_type::float_;
+            case onnx::AttributeProto_AttributeType_INTS:
+                return element_type::int32_;
+            case onnx::AttributeProto_AttributeType_STRINGS:
+                return element_type::string_;
+            default:
+                return element_type::dynamic_;
+        }
+    }
     #endif
 
     #if TFLITE
