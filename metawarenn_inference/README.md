@@ -32,7 +32,9 @@
       # if not installed with sudo  
       export PATH=install_protobuf_folder/bin:${PATH}  
       export LD_LIBRARY_PATH=install_protobuf_folder/lib:${LD_LIBRARY_PATH}  
+      export CPLUS_INCLUDE_PATH=install_protobuf_folder/include:${CPLUS_INCLUDE_PATH}  
 ```
+
     2. Download protobuf library version 3.11.3 from the egnyte link https://multicorewareinc.egnyte.com/dl/FjljPlgjlI  
     3. Unzip and move the "libprotobuf.so" to "/path/to/tvm/metawarenn_inference"  
 
