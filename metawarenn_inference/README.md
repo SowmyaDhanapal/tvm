@@ -13,42 +13,44 @@
    1. virtualenv --python=/usr/bin/python3.6 ./tvm_env
    2. source ./tvm_env/bin/activate
 #### Protobuf library dependencies
-   1. Requird Protobuf Version - 3.11.3, Check with the following command,
-      $ protoc --version
-      Steps to install Protobuf 3.11.3:
-        Download the Protobuf package from  https://github.com/protocolbuffers/protobuf/releases/download/v3.11.3/protobuf-all-3.11.3.tar.gz
+   1. Requird Protobuf Version - 3.11.3. Check with the following command:  
+      `protoc --version`  
+      + Steps to install Protobuf 3.11.3:  
 ```
-    tar -xf protobuf-all-3.11.3.tar.gz
-    cd protobuf-3.11.3
-    ./configure
-    make
-    make check
-    sudo make install
-    cd ./python
-    python3 setup.py build
-    python3 setup.py test
-    sudo python3 setup.py install
-    sudo ldconfig
+      wget https://github.com/protocolbuffers/protobuf/releases/download/v3.11.3/protobuf-all-3.11.3.tar.gz
+      tar -xf protobuf-all-3.11.3.tar.gz
+      cd protobuf-3.11.3
+      ./configure [--prefix=install_protobuf_folder]
+      make
+      make check
+      sudo make install
+      cd ./python
+      python3 setup.py build
+      python3 setup.py test
+      sudo python3 setup.py install
+      sudo ldconfig
+      # if not installed with sudo  
+      export LD_LIBRARY_PATH=install_protobuf_folder/lib:${LD_LIBRARY_PATH}
 ```
-    2. Download protobuf library version 3.11.3 from the egnyte link https://multicorewareinc.egnyte.com/dl/FjljPlgjlI
-    3. Unzip and move the "libprotobuf.so" to "/path/to/tvm/metawarenn_inference"
+    2. Download protobuf library version 3.11.3 from the egnyte link https://multicorewareinc.egnyte.com/dl/FjljPlgjlI  
+    3. Unzip and move the "libprotobuf.so" to "/path/to/tvm/metawarenn_inference"  
 
 ### Modifications to make before build
-#### To Load MetaWareNN Executable Graph in Shared Memory[Default flow]
-   1. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_lib/executable_network/metawarenn_executable_graph.cc" with path to store the MWNNExecutableNetwork.bin in line no: 401
-   2. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_lib/mwnn_inference_api/mwnn_inference_api.cc" file with saved file path of MWNNExecutableNetwork.bin in line no: 51
+#### To Load MetaWareNN Executable Graph in Shared Memory [Default flow]
+   1. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_lib/executable_network/metawarenn_executable_graph.cc" with path to store the MWNNExecutableNetwork.bin in line no: 401 and 414  
+   2. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_lib/mwnn_inference_api/mwnn_inference_api.cc" file with saved file path of MWNNExecutableNetwork.bin in line no: 51  
 #### To Invoke the NNAC & EVGENCNN Script to generate the EV Binary file
-   1. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_json_runtime.cc" file as follows:
-      i. Set the INVOKE_NNAC macro to 1 in line no: 44
-      i. Set the path to store the MWNN file dumps in line no: 304
-      ii. Set the path to tvm in line no: 313
-   2. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_lib/mwnnconvert/mwnn_convert.sh" file as follows:
-      i. Set the $EV_CNNMODELS_HOME path in line no: 3
-      ii. Set the absolute path for ARC/cnn_tools/setup.sh file in line no: 4
-      iii. Update the path to tvm with MWNN support in line no: 9 and line no: 20
-      iv. Update the path to evgencnn executable in line no: 10
-      v. Update the Imagenet images path in line no: 18
-   [Note] : Generated EV Binary file for MetaWareNN SubGraph will store in evgencnn/scripts folder.
+   1. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_json_runtime.cc" file as follows:  
+      i. Set the INVOKE_NNAC macro to 1 in line no: 44  
+      ii. Set the path to store the MWNN file dumps in line no: 310  
+      iii. Set the path to tvm in line no: 319  
+   2. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_lib/mwnnconvert/mwnn_convert.sh" file as follows:  
+      i. Set the $EV_CNNMODELS_HOME path in line no: 3  
+      ii. Set the absolute path for ARC/cnn_tools/setup.sh file in line no: 4  
+      iii. Update the path to tvm with MWNN support in line no: 9 and line no: 20  
+      iv. Update the path to evgencnn executable in line no: 10  
+      v. Update the Imagenet images path in line no: 18  
+   [Note] : Generated EV Binary file for MetaWareNN SubGraph will be stored in evgencnn/scripts folder.  
 
 ### Steps to build
    1. mkdir build
