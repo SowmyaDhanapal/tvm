@@ -122,10 +122,16 @@ class MWNNNode {
         return std::make_shared<op::GlobalAvgPool>(name, inputs, outputs);
       }
       else if(op_type == "MaxPool") {
-        return std::make_shared<op::MaxPool>(name, inputs, outputs);
+        return std::make_shared<op::MaxPool>(name, inputs, outputs,
+                                                  get_attribute_value_int("pool_size"),
+                                                  get_attribute_value_int("strides"),
+                                                  get_attribute_value_int("pads"));
       }
-      else if(op_type == "AveragePool") {
-        return std::make_shared<op::AvgPool>(name, inputs, outputs);
+      else if(op_type == "AvgPool") {
+        return std::make_shared<op::AvgPool>(name, inputs, outputs,
+                                                  get_attribute_value_int("pool_size"),
+                                                  get_attribute_value_int("strides"),
+                                                  get_attribute_value_int("pads"));
       }
       else if(op_type == "Dense") {
         return std::make_shared<op::Dense>(name, inputs, outputs);
@@ -138,7 +144,12 @@ class MWNNNode {
         return std::make_shared<op::Concat>(name, inputs, outputs);
       }
       else if(op_type == "LRN") {
-        return std::make_shared<op::LRN>(name, inputs, outputs);
+        return std::make_shared<op::LRN>(name, inputs, outputs,
+                                                  get_attribute_value_int("alpha"),
+                                                  get_attribute_value_int("beta"),
+                                                  get_attribute_value_int("axis"),
+                                                  get_attribute_value_int("size"),
+                                                  get_attribute_value_int("bias"));
       }
       else if(op_type == "Flatten") {
         return std::make_shared<op::Flatten>(name, inputs, outputs);
@@ -197,6 +208,9 @@ class MWNNNode {
       }
       else if(op_type == "FullyConnected") {
         return std::make_shared<op::FullyConnected>(name, inputs, outputs);
+      }
+      else if(op_type == "Transpose") {
+        return std::make_shared<op::Transpose>(name, inputs, outputs);
       }
       else if(op_type == "Reshape") {
         return std::make_shared<op::Reshape>(name, inputs, outputs);

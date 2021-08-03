@@ -98,6 +98,63 @@ void fill_layer_serializer(DataSerialization &layer_serializer, std::vector<MWNN
       l_hdr.layer_type = 8;
       node = std::dynamic_pointer_cast<op::BatchNormalization>(node);
      }
+    else if(op_type == "AvgPool") {
+      l_hdr.layer_type = 9;
+      node = std::dynamic_pointer_cast<op::AvgPool>(node);
+    }
+    else if(op_type == "MaxPool") {
+      l_hdr.layer_type = 10;
+      node = std::dynamic_pointer_cast<op::MaxPool>(node);
+    }
+    else if(op_type == "BatchFlatten") {
+      l_hdr.layer_type = 11;
+    }
+    else if(op_type == "Dense") {
+      l_hdr.layer_type = 12;
+    }
+    else if(op_type == "Concat") {
+      l_hdr.layer_type = 13;
+    }
+    else if(op_type == "LRN") {
+      l_hdr.layer_type = 14;
+      node = std::dynamic_pointer_cast<op::LRN>(node);
+    }
+    else if(op_type == "Squeeze") {
+      l_hdr.layer_type = 15;
+    }
+    else if(op_type == "BiasAdd") {
+      l_hdr.layer_type = 16;
+    }
+    else if(op_type == "Max") {
+      l_hdr.layer_type = 17;
+    }
+    else if(op_type == "Maximum") {
+      l_hdr.layer_type = 18;
+    }
+    else if(op_type == "Minimum") {
+      l_hdr.layer_type = 19;
+    }
+    else if(op_type == "Exp") {
+      l_hdr.layer_type = 20;
+    }
+    else if(op_type == "Sum") {
+      l_hdr.layer_type = 21;
+    }
+    else if(op_type == "Subtract") {
+      l_hdr.layer_type = 22;
+    }
+    else if(op_type == "Divide") {
+      l_hdr.layer_type = 23;
+    }
+    else if(op_type == "Clip") {
+      l_hdr.layer_type = 24;
+    }
+    else if(op_type == "Mul") {
+      l_hdr.layer_type = 25;
+    }
+    else if(op_type == "Transpose") {
+      l_hdr.layer_type = 26;
+    }
     else {
       std::cout << "\n UnSupported Layer!!!";
       exit(1);
@@ -314,6 +371,89 @@ void parse_layer_info(char *exe_graph, uint32_t offset, uint32_t num_data, uint3
     else if(type == "BatchNorm") {
       auto epsilon = read_from_graph_data<float>(exe_graph, offset);
       std::cout << "\n Epsilon : " << epsilon;
+    }
+    else if(type == "MaxPool" || type == "AvgPool") {
+      auto psize_len = read_from_graph_data<uint32_t>(exe_graph, offset);
+      std::vector<int32_t> pool_size;
+      for (int j = 0; j < psize_len; j++) {
+        auto psize = read_from_graph_data<int32_t>(exe_graph, offset);
+        pool_size.push_back(psize);
+      }
+      auto str_len = read_from_graph_data<uint32_t>(exe_graph, offset);
+      std::vector<int32_t> strides;
+      for (int j = 0; j < str_len; j++) {
+        auto str = read_from_graph_data<int32_t>(exe_graph, offset);
+        strides.push_back(str);
+      }
+      auto p_len = read_from_graph_data<uint32_t>(exe_graph, offset);
+      std::vector<int32_t> pads;
+      for (int j = 0; j < p_len; j++) {
+        auto p = read_from_graph_data<int32_t>(exe_graph, offset);
+        pads.push_back(p);
+      }
+      std::cout << "\n Pool Size : ";
+      for (auto psize : pool_size) {
+        std::cout << psize << ", ";
+      }
+      std::cout << "\n Strides : ";
+      for (auto st : strides) {
+        std::cout << st << ", ";
+      }
+      std::cout << "\n Pads : ";
+      for (auto p : pads) {
+        std::cout << p << ", ";
+      }
+    }
+    else if(type == "LRN") {
+      auto alpha_len = read_from_graph_data<uint32_t>(exe_graph, offset);
+      std::vector<int32_t> alpha;
+      for (int j = 0; j < alpha_len; j++) {
+        auto alp = read_from_graph_data<int32_t>(exe_graph, offset);
+        alpha.push_back(alp);
+      }
+      auto beta_len = read_from_graph_data<uint32_t>(exe_graph, offset);
+      std::vector<int32_t> beta;
+      for (int j = 0; j < beta_len; j++) {
+        auto b = read_from_graph_data<int32_t>(exe_graph, offset);
+        beta.push_back(b);
+      }
+      auto axis_len = read_from_graph_data<uint32_t>(exe_graph, offset);
+      std::vector<int32_t> axis;
+      for (int j = 0; j < axis_len; j++) {
+        auto a = read_from_graph_data<int32_t>(exe_graph, offset);
+        axis.push_back(a);
+      }
+      auto size_len = read_from_graph_data<uint32_t>(exe_graph, offset);
+      std::vector<int32_t> size;
+      for (int j = 0; j < size_len; j++) {
+        auto s = read_from_graph_data<int32_t>(exe_graph, offset);
+        size.push_back(s);
+      }
+      auto bias_len = read_from_graph_data<uint32_t>(exe_graph, offset);
+      std::vector<int32_t> bias;
+      for (int j = 0; j < bias_len; j++) {
+        auto b = read_from_graph_data<int32_t>(exe_graph, offset);
+        bias.push_back(b);
+      }
+      std::cout << "\n Alpha : ";
+      for (auto a : alpha) {
+        std::cout << a << ", ";
+      }
+      std::cout << "\n Beta : ";
+      for (auto b : beta) {
+        std::cout << b << ", ";
+      }
+      std::cout << "\n Axis : ";
+      for (auto a : axis) {
+        std::cout << a << ", ";
+      }
+      std::cout << "\n Size : ";
+      for (auto s : size) {
+        std::cout << s << ", ";
+      }  std::cout << "\n Bias : ";
+      for (auto b : bias) {
+        std::cout << b << ", ";
+      }
     }
   }
 }
