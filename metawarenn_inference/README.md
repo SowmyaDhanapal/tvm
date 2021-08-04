@@ -49,7 +49,7 @@
       iii. Set the path to tvm in line no: 319  
    2. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_lib/mwnnconvert/mwnn_convert.sh" file as follows:  
       i. Set the $EV_CNNMODELS_HOME path in line no: 3  
-      ii. Set the absolute path for ARC/cnn_tools/setup.sh file in line no: 4  
+      ii. Set the absolute path for ARC/setup.sh file in line no: 4  
       iii. Update the path to tvm with MWNN support in line no: 9 and line no: 20  
       iv. Update the path to evgencnn executable in line no: 10  
       v. Update the Imagenet images path in line no: 18  
