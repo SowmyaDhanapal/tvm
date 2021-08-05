@@ -308,6 +308,12 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     std::cout << "\n Graph Name : " << mwnn_graph_->get_name();
     std::string name = mwnn_graph_->get_name();
     auto mwnn_op_path = "/path/to/tvm/metawarenn_inference/EVDumps/";
+    auto check = mkdir(mwnn_op_path, 0777);
+    if(check != 0)
+    {
+      std::cout << "\nPlease check the directory path to store the serialized binary!!!!!";
+      exit(1);
+    }
     auto mwnn_proto_bin = std::string(mwnn_op_path) + std::string(name) + ".bin";
 
     int fp = open(mwnn_proto_bin.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);

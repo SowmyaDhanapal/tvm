@@ -21,6 +21,8 @@
 import tvm.ir
 from tvm.relay import transform
 from tvm.relay.build_module import bind_params_by_name
+from tvm.relay.expr import Call
+from tvm.relay.expr_functor import ExprMutator, ExprVisitor
 
 def _register_external_op_helper(op_name, supported=True):
     """The helper function to indicate that a given operator can be supported
@@ -88,6 +90,7 @@ def partition_for_metawarenn(mod, params=None):
     seq = tvm.transform.Sequential(
     [
         transform.InferType(),
+        RemoveDropoutPass(),
         transform.RemoveUnusedFunctions(),
         transform.FoldConstant(),
         transform.AnnotateTarget("metawarenn"),
@@ -99,3 +102,25 @@ def partition_for_metawarenn(mod, params=None):
     with tvm.transform.PassContext(opt_level=3):
         mod = seq(mod)
     return mod
+
+class RemoveDropout(ExprMutator):
+    """
+    Removes all nn.dropout from an expr.
+    """
+
+    def visit_tuple_getitem(self, op):
+        visit = super().visit_tuple_getitem(op)
+        if visit.index != 0:
+            return visit
+        if (
+            isinstance(visit.tuple_value, Call)
+            and visit.tuple_value.op.name == "nn.dropout"
+            and visit.index == 0
+        ):
+            return visit.tuple_value.args[0]
+        return visit
+
+@transform.function_pass(opt_level=0)
+class RemoveDropoutPass:
+    def transform_function(self, func, mod, _):
+        return RemoveDropout().visit(func)
