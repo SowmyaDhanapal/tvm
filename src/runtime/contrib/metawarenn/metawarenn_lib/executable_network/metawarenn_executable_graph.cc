@@ -461,7 +461,8 @@ void parse_layer_info(char *exe_graph, uint32_t offset, uint32_t num_data, uint3
 
 MWNNExecutableGraph::MWNNExecutableGraph(MWNNGraph mwnn_graph) {
   std::cout << "\n MWNNExecutableGraph Constructor mwnn_graph data!!! ";
-  std::cout << "\n Graph name : " << mwnn_graph.get_name();
+  auto graph_name = mwnn_graph.get_name();
+  std::cout << "\n Graph name : " << graph_name;
   DataSerialization input_serializer;
   DataSerialization output_serializer;
   DataSerialization constant_serializer;
@@ -538,9 +539,15 @@ MWNNExecutableGraph::MWNNExecutableGraph(MWNNGraph mwnn_graph) {
   //====================================================================================================//
 
   //Uncomment to Dump the MetaWareNN Binary File
-  std::ofstream writeFile("/Path/to/MWNNExecutableNetwork.bin", std::ios::out | std::ios::binary);
+  std::string bin_path = "/Path/to/store/ExecutableGraph/";
+  std::string mwnn_exec_bin = bin_path + graph_name + "_exec.bin";
+  std::ofstream writeFile(mwnn_exec_bin, std::ios::out | std::ios::binary);
   if (writeFile.is_open())
     writeFile.write(reinterpret_cast<char*>(&exe_graph[0]), b_hdr.file_size);
+  else {
+    std::cout << "\n Couldn't open the binary file in MWNNExecutableGraph! Please check the path";
+    exit(1);
+  }
   writeFile.close();
   free(exe_graph);
 }

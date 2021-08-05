@@ -22,7 +22,8 @@ else:
   print("MetaWareNN Backend Function exists!!!")
 
 print("============================ In Build =================================")
-target = "c"
+#In Subgraphs case, export_library() successfully exports the .so file with target "llvm"
+target = "llvm"
 with tvm.transform.PassContext():
     lib = relay.build(mod, target=target, params=params)
     print(lib) #<tvm.relay.backend.executor_factory.GraphExecutorFactoryModule object at 0x7f768c01be80>

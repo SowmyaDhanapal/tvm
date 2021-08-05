@@ -40,8 +40,8 @@
 
 ### Modifications to make before build
 #### To Load MetaWareNN Executable Graph in Shared Memory [Default flow]
-   1. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_lib/executable_network/metawarenn_executable_graph.cc" with path to store the MWNNExecutableNetwork.bin in line no: 401 and 414  
-   2. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_lib/mwnn_inference_api/mwnn_inference_api.cc" file with saved file path of MWNNExecutableNetwork.bin in line no: 51  
+   1. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_lib/executable_network/metawarenn_executable_graph.cc" with path to store the MWNN Executable network binary in line no: 542
+   2. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_lib/mwnn_inference_api/mwnn_inference_api.cc" file with saved file path of MWNN Executable network binary in line no: 51
 #### To Invoke the NNAC & EVGENCNN Script to generate the EV Binary file
    1. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_json_runtime.cc" file as follows:  
       i. Set the INVOKE_NNAC macro to 1 in line no: 44  
@@ -76,3 +76,11 @@
    3. cd /path/to/tvm/metawarenn_inference
    4. Update the ONNX model path in line no: 9
    5. python mwnn_inference.py
+
+### To Run the Inference for multiple models
+   1. export TVM_HOME=/path/to/tvm
+   2. export PYTHONPATH=$TVM_HOME/python:${PYTHONPATH}
+   3. cd /path/to/tvm/metawarenn_inference
+   4. sh download_onnx_models.sh
+   5. Update the path to downloaded ONNX models by setting the path to tvm in metawarenn_inference/inference_regression.py file in line no: 9
+   6. python inference_regression.py
