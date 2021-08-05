@@ -53,6 +53,7 @@
       iii. Update the path to tvm with MWNN support in line no: 9 and line no: 20  
       iv. Update the path to evgencnn executable in line no: 10  
       v. Update the Imagenet images path in line no: 18  
+      vi. Update `evgencnn` to `evgencnn.pyc` if using the release (not development) version of ARC/cnn_tools in line no: 21  
    [Note] : Generated EV Binary file for MetaWareNN SubGraph will be stored in evgencnn/scripts folder.  
 
 ### Steps to build
