@@ -40,13 +40,12 @@
 
 ### Modifications to make before build
 #### To Load MetaWareNN Executable Graph in Shared Memory [Default flow]
-   1. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_lib/executable_network/metawarenn_executable_graph.cc" with path to store the MWNN Executable network binary in line no: 542
+   1. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_lib/executable_network/metawarenn_executable_graph.cc" with path to store the MWNN Executable network binary in line no: 826
    2. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_lib/mwnn_inference_api/mwnn_inference_api.cc" file with saved file path of MWNN Executable network binary in line no: 51
 #### To Invoke the NNAC & EVGENCNN Script to generate the EV Binary file
    1. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_json_runtime.cc" file as follows:  
-      i. Set the INVOKE_NNAC macro to 1 in line no: 44  
-      ii. Set the path to store the MWNN file dumps in line no: 310  
-      iii. Set the path to tvm in line no: 319  
+      i. Set the INVOKE_NNAC macro to 1 in line no: 44
+      iii. Set the path to tvm in line no: 316 & 333
    2. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_lib/mwnnconvert/mwnn_convert.sh" file as follows:  
       i. Set the $EV_CNNMODELS_HOME path in line no: 3  
       ii. Set the absolute path for ARC/setup.sh file in line no: 4  
