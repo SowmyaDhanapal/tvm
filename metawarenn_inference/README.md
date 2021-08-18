@@ -7,8 +7,16 @@
    3. git checkout metawarenn_dev
    4. git submodule sync
    5. git submodule update
-   6. sudo apt-get update
-   7. sudo apt-get install -y python3 python3-dev python3-setuptools gcc libtinfo-dev zlib1g-dev build-essential cmake libedit-dev libxml2-dev
+   6. MetaWareNN Library submodule setup
+      * `git submodule update --init --recursive`
+      *  Move to metawarenn_lib submodule and checkout to metawarenn_dev branch
+         a. `cd tvm/src/runtime/contrib/metawarenn/metawarenn_lib`
+         b. `git checkout metawarenn_dev`
+      *  Once initial submodule setup is done with above commands, use this command to pull from the submodule in future
+         i.  `cd /path/to/tvm`
+         ii. `git pull --recurse-submodules`
+   7. sudo apt-get update
+   8. sudo apt-get install -y python3 python3-dev python3-setuptools gcc libtinfo-dev zlib1g-dev build-essential cmake libedit-dev libxml2-dev
 #### Install Python Virtual Environment
    1. virtualenv --python=/usr/bin/python3.6 ./tvm_env
    2. source ./tvm_env/bin/activate
@@ -40,19 +48,13 @@
 
 ### Modifications to make before build
 #### To Load MetaWareNN Executable Graph in Shared Memory [Default flow]
-   1. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_lib/executable_network/metawarenn_executable_graph.cc" with path to store the MWNN Executable network binary in line no: 826
-   2. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_lib/mwnn_inference_api/mwnn_inference_api.cc" file with saved file path of MWNN Executable network binary in line no: 51
+   1. Update tvm/src/runtime/contrib/metawarenn/metawarenn_lib/metawarenn_common.h file
+        a. Set Macro ONNX to 0 and TVM to 1 in line number 4 and 7
+   2. Set path to tvm in tvm/metawarenn_inference/env.sh line no: 5
 #### To Invoke the NNAC & EVGENCNN Script to generate the EV Binary file
    1. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_json_runtime.cc" file as follows:  
       i. Set the INVOKE_NNAC macro to 1 in line no: 44
-      iii. Set the path to tvm in line no: 316 & 333
-   2. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_lib/mwnnconvert/mwnn_convert.sh" file as follows:  
-      i. Set the $EV_CNNMODELS_HOME path in line no: 3  
-      ii. Set the absolute path for ARC/setup.sh file in line no: 4  
-      iii. Update the path to tvm with MWNN support in line no: 9 and line no: 20  
-      iv. Update the path to evgencnn executable in line no: 10  
-      v. Update the Imagenet images path in line no: 18  
-      vi. Update `evgencnn` to `evgencnn.pyc` if using the release (not development) version of ARC/cnn_tools in line no: 21  
+   2. Set path to ARC/ directory in tvm/metawarenn_inference/env.sh line no: 11
    [Note] : Generated EV Binary file for MetaWareNN SubGraph will be stored in evgencnn/scripts folder.  
 
 ### Steps to build
@@ -74,7 +76,8 @@
    2. export PYTHONPATH=$TVM_HOME/python:${PYTHONPATH}
    3. cd /path/to/tvm/metawarenn_inference
    4. Update the ONNX model path in line no: 9
-   5. python mwnn_inference.py
+   5. source env.sh
+   6. python mwnn_inference.py
 
 ### To Run the Inference for multiple models
    1. export TVM_HOME=/path/to/tvm
@@ -82,4 +85,5 @@
    3. cd /path/to/tvm/metawarenn_inference
    4. sh download_onnx_models.sh
    5. Update the path to downloaded ONNX models by setting the path to tvm in metawarenn_inference/inference_regression.py file in line no: 9
-   6. python inference_regression.py
+   6. source env.sh
+   7. python inference_regression.py
