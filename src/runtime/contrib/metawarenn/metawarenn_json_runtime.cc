@@ -41,7 +41,7 @@
 #include "metawarenn_lib/mwnn_inference_api/mwnn_inference_api.h"
 #include "metawarenn_lib/mwnnconvert/mwnn_protobuf/cpp_wrapper/MWNN.pb.h"
 #define CHW_TO_HWC 0
-#define INVOKE_NNAC 0
+#define INVOKE_NNAC 1
 
 namespace tvm {
 namespace runtime {
@@ -140,21 +140,288 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
   void BuildMetaWareNNGraph() {
     graph_count++;
     std::string subgraph_name = "MetaWareNN_" + std::to_string(graph_count);
-    mwnn_graph_ = std::make_shared<::metawarenn::MWNNGraph>(nodes_, subgraph_name);
+    mwnn_graph_ = std::make_shared<::metawarenn::MWNNGraph>();
+    mwnn_graph_->set_name(subgraph_name);
+    int layer_count = 0;
+    std::vector<std::vector<int64_t>> op_shape;
+    std::vector<DLDataType> dtypes;
+    std::string op_name;
+    for (int id = 0; id < nodes_.size(); id++) {
+      const auto& node = nodes_[id];
+      //std::cout << "\n Node Op Type : " << node.GetOpType() << " Name : " << node.GetOpName();
+      if (node.GetOpType() == "kernel") {
+        std::string node_name;
+        std::string node_op_type;
+        std::vector<std::string> node_inputs;
+        std::vector<std::string> node_outputs;
+        std::vector<metawarenn::MWNNAttribute> node_attributes;
+        int out_index = 1;
+
+        //Node Inputs Parsing
+        for (size_t i = 0; i < node.GetInputs().size(); ++i) {
+          auto in_node = node.GetInputs()[i];
+          if(in_node.id_ > out_index)
+            out_index = in_node.id_;
+          std::string ip_name = "node_" + std::to_string(in_node.id_);
+          node_inputs.emplace_back(ip_name);
+        }
+        //Node Output Parsing
+        op_name = "node_" + std::to_string(out_index+1);
+        node_outputs.emplace_back(op_name);
+
+        //Node Output Shape & Type Parsing
+        op_shape = node.GetOpShape();
+        dtypes = node.GetOpDataType();
+        //Setting MetaWareNN Op Type & Node Name
+        if (node.GetOpName() == "nn.conv2d") {
+          node_op_type = "Conv";
+          node_name = node_op_type + std::to_string(layer_count++);
+          std::vector<std::string> strides = node.GetAttr<std::vector<std::string>>("strides");
+          std::vector<std::string> pads = node.GetAttr<std::vector<std::string>>("padding");
+          std::vector<std::string> dilations = node.GetAttr<std::vector<std::string>>("dilation");
+          int group = std::stoi(node.GetAttr<std::vector<std::string>>("groups")[0]);
+          auto weight_entry = node.GetInputs()[1];
+          std::vector<long int> kernel_shape = nodes_[weight_entry.id_].GetOpShape()[weight_entry.index_];
+
+          metawarenn::MWNNAttribute mwnn_attr_dilate("dilations", std::vector<int>({std::stoi(dilations[0]), std::stoi(dilations[1])}));
+          node_attributes.emplace_back(mwnn_attr_dilate);
+          metawarenn::MWNNAttribute mwnn_attr_stride("strides", std::vector<int>({std::stoi(strides[0]), std::stoi(strides[1])}));
+          node_attributes.emplace_back(mwnn_attr_stride);
+          metawarenn::MWNNAttribute mwnn_attr_pad("pads", std::vector<int>({std::stoi(pads[0]), std::stoi(pads[1]), std::stoi(pads[2]), std::stoi(pads[3])}));
+          node_attributes.emplace_back(mwnn_attr_pad);
+          metawarenn::MWNNAttribute mwnn_attr_group("group", std::vector<int>({group}));
+          node_attributes.emplace_back(mwnn_attr_group);
+          metawarenn::MWNNAttribute mwnn_attribute("activation", std::vector<int>({0}));
+          node_attributes.emplace_back(mwnn_attribute);
+          metawarenn::MWNNAttribute mwnn_attr_kernel_shape("kernel_shape", std::vector<int>({kernel_shape[2], kernel_shape[3]}));
+          node_attributes.emplace_back(mwnn_attr_kernel_shape);
+        }
+        else if (node.GetOpName() == "nn.batch_norm") {
+          node_op_type = "BatchNormalization";
+          node_name = node_op_type + std::to_string(layer_count++);
+
+          float epsilon = std::stof(node.GetAttr<std::vector<std::string>>("epsilon")[0]);
+          metawarenn::MWNNAttribute mwnn_attr_epsilon("epsilon", std::vector<float>({epsilon}));
+          node_attributes.emplace_back(mwnn_attr_epsilon);
+        }
+        else if (node.GetOpName() == "nn.relu") {
+          node_op_type = "Relu";
+          node_name = node_op_type + std::to_string(layer_count++);
+        }
+        else if (node.GetOpName() == "add") {
+          node_op_type = "Add";
+          node_name = node_op_type + std::to_string(layer_count++);
+        }
+        else if (node.GetOpName() == "nn.global_avg_pool2d") {
+          node_op_type = "GlobalAveragePool";
+          node_name = node_op_type + std::to_string(layer_count++);
+        }
+        else if (node.GetOpName() == "nn.avg_pool2d" || node.GetOpName() == "nn.max_pool2d") {
+          node_op_type = node.GetOpName() == "nn.avg_pool2d" ? "AveragePool" : "MaxPool";
+          node_name = node_op_type + std::to_string(layer_count++);
+          auto pool_size = node.GetAttr<std::vector<std::string>>("pool_size");
+          auto padding = node.GetAttr<std::vector<std::string>>("padding");
+          auto strides = node.GetAttr<std::vector<std::string>>("strides");
+          metawarenn::MWNNAttribute mwnn_attr_pool_size("kernel_shape", std::vector<int>({std::stoi(pool_size[0]), std::stoi(pool_size[1])}));
+          node_attributes.emplace_back(mwnn_attr_pool_size);
+          metawarenn::MWNNAttribute mwnn_attr_pad("pads", std::vector<int>({std::stoi(padding[0]), std::stoi(padding[1]), std::stoi(padding[2]), std::stoi(padding[3])}));
+          node_attributes.emplace_back(mwnn_attr_pad);
+          metawarenn::MWNNAttribute mwnn_attr_stride("strides", std::vector<int>({std::stoi(strides[0]), std::stoi(strides[1])}));
+          node_attributes.emplace_back(mwnn_attr_stride);
+        }
+        else if (node.GetOpName() == "nn.lrn") {
+          node_op_type = "LRN";
+          node_name = node_op_type + std::to_string(layer_count++);
+          auto alpha = node.GetAttr<std::vector<std::string>>("alpha");
+          auto beta = node.GetAttr<std::vector<std::string>>("beta");
+          auto size = node.GetAttr<std::vector<std::string>>("size");
+          auto axis = node.GetAttr<std::vector<std::string>>("axis");
+          auto bias = node.GetAttr<std::vector<std::string>>("bias");
+          metawarenn::MWNNAttribute mwnn_attr_alpha("alpha", std::vector<int>({std::stoi(alpha[0])}));
+          node_attributes.emplace_back(mwnn_attr_alpha);
+          metawarenn::MWNNAttribute mwnn_attr_beta("beta", std::vector<int>({std::stoi(beta[0])}));
+          node_attributes.emplace_back(mwnn_attr_beta);
+          metawarenn::MWNNAttribute mwnn_attr_size("size", std::vector<int>({std::stoi(size[0])}));
+          node_attributes.emplace_back(mwnn_attr_size);
+          metawarenn::MWNNAttribute mwnn_attr_axis("axis", std::vector<int>({std::stoi(axis[0])}));
+          node_attributes.emplace_back(mwnn_attr_axis);
+          metawarenn::MWNNAttribute mwnn_attr_bias("bias", std::vector<int>({std::stoi(bias[0])}));
+          node_attributes.emplace_back(mwnn_attr_bias);
+        }
+        else if (node.GetOpName() == "nn.batch_flatten") {
+          node_op_type = "BatchFlatten";
+          node_name = node_op_type + std::to_string(layer_count++);
+        }
+        else if (node.GetOpName() == "nn.dense") {
+          node_op_type = "Dense";
+          node_name = node_op_type + std::to_string(layer_count++);
+          /*auto units = node.GetAttr<std::vector<std::string>>("units");
+          metawarenn::MWNNAttribute mwnn_attr_units("units", std::vector<int>({std::stoi(units[0])}));
+          node_attributes.emplace_back(mwnn_attr_units);*/
+        }
+        else if (node.GetOpName() == "nn.bias_add") {
+          node_op_type = "BiasAdd";
+          node_name = node_op_type + std::to_string(layer_count++);
+        }
+        else if (node.GetOpName() == "clip") {
+          node_op_type = "Clip";
+          node_name = node_op_type + std::to_string(layer_count++);
+          auto min = node.GetAttr<std::vector<std::string>>("a_min");
+          metawarenn::MWNNAttribute mwnn_attr_min("min", std::vector<int>({std::stoi(min[0])}));
+          node_attributes.emplace_back(mwnn_attr_min);
+          auto max = node.GetAttr<std::vector<std::string>>("a_max");
+          metawarenn::MWNNAttribute mwnn_attr_max("max", std::vector<int>({std::stoi(max[0])}));
+          node_attributes.emplace_back(mwnn_attr_max);
+        }
+        else if (node.GetOpName() == "squeeze") {
+          node_op_type = "Squeeze";
+          node_name = node_op_type + std::to_string(layer_count++);
+          auto axis = node.GetAttr<std::vector<std::string>>("axis");
+          metawarenn::MWNNAttribute mwnn_attr_axis("axis", std::vector<int>({std::stoi(axis[0])}));
+          node_attributes.emplace_back(mwnn_attr_axis);
+        }
+        else if (node.GetOpName() == "transpose") {
+          node_op_type = "Transpose";
+          node_name = node_op_type + std::to_string(layer_count++);
+        }
+        else if (node.GetOpName() == "concatenate") {
+          node_op_type = "Concat";
+          node_name = node_op_type + std::to_string(layer_count++);
+        }
+        else if (node.GetOpName() == "max") {
+          node_op_type = "Max";
+          node_name = node_op_type + std::to_string(layer_count++);
+        }
+        else if (node.GetOpName() == "subtract") {
+          node_op_type = "Subtract";
+          node_name = node_op_type + std::to_string(layer_count++);
+        }
+        else if (node.GetOpName() == "exp") {
+          node_op_type = "Exp";
+          node_name = node_op_type + std::to_string(layer_count++);
+        }
+        else if (node.GetOpName() == "maximum") {
+          node_op_type = "Maximum";
+          node_name = node_op_type + std::to_string(layer_count++);
+        }
+        else if (node.GetOpName() == "minimum") {
+          node_op_type = "Minimum";
+          node_name = node_op_type + std::to_string(layer_count++);
+        }
+        else if (node.GetOpName() == "sum") {
+          node_op_type = "Sum";
+          node_name = node_op_type + std::to_string(layer_count++);
+        }
+        else if (node.GetOpName() == "divide") {
+          node_op_type = "Divide";
+          node_name = node_op_type + std::to_string(layer_count++);
+        }
+        else if (node.GetOpName() == "multiply") {
+          node_op_type = "Mul";
+          node_name = node_op_type + std::to_string(layer_count++);
+        }
+        else if (node.GetOpName() == "reshape") {
+          node_op_type = "Reshape";
+          node_name = node_op_type + std::to_string(layer_count++);
+          std::vector<std::string> shape = node.GetAttr<std::vector<std::string>>("newshape");
+          metawarenn::MWNNAttribute mwnn_attr_shape("shape", std::vector<int>({std::stoi(shape[0]), std::stoi(shape[1])}));
+          node_attributes.emplace_back(mwnn_attr_shape);
+        }
+        else {
+          std::cout << "\n Unsupported Op in MetaWareNN backend : " << node.GetOpName();
+          exit(1);
+        }
+        /*std::cout << "\n ================================Node=============================\n";
+        std::cout << "\n Name : " << node_name;
+        std::cout << "\n Type : " << node_op_type;
+        for (auto nip: node_inputs)
+          std::cout << "\n Inputs : " << nip;
+        for (auto nop: node_outputs)
+          std::cout << "\n Outputs : " << nop;*/
+
+        metawarenn::MWNNNode mwnn_node(node_name, node_op_type, node_attributes, node_inputs, node_outputs);
+        mwnn_graph_->set_graph_nodes(mwnn_node);
+        auto node = mwnn_node.get_node();
+        mwnn_graph_->mwnn_graph_nodes[mwnn_node.get_name()] = std::move(node);
+      }
+    }
+    std::vector<int> dims;
+    for(int m = 0; m < op_shape.size(); m++)
+      for(int n = 0; n < op_shape[m].size(); n++) {
+        dims.push_back(op_shape[m][n]);
+      }
+
+    //Add Outputs
+    auto mwnn_type = get_mwnn_type_tvm(dtypes[0].code);
+    metawarenn::MWNNValueInfo mwnn_output(op_name, dims, mwnn_type);
+    mwnn_graph_->set_graph_op_names(mwnn_output.get_name());
+    //Fills Graph Output Tensor Details - Name, Dims
+    metawarenn::MWNNTensor mwnn_op_tensor(mwnn_output.get_name(), mwnn_output.get_type(), mwnn_output.get_dims());
+    mwnn_graph_->set_graph_op_tensor(mwnn_op_tensor);
+
     // Add inputs and constants.
     for (size_t i = 0; i < input_nodes_.size(); ++i) {
       auto nid = input_nodes_[i];
       const auto& node = nodes_[nid];
       std::string name = "node_" + std::to_string(nid);
       if (node.GetOpType() == "input") {
-        mwnn_graph_->set_graph_inputs(name, node);
+        auto shapes = node.GetOpShape();
+        auto dtypes = node.GetOpDataType();
+
+        for (size_t i = 0; i < shapes.size(); ++i) {
+          auto shape = shapes[i];
+          int size = shape.size();
+          std::vector<int> dims(size);
+          for(int d = 0; d < size; d++)
+            dims[d] = shape[d];
+          std::cout << "\nInput Name : " << name;
+          std::cout << "\nInput Dims : ";
+          for(int j=0; j<dims.size(); j++)
+            std::cout << dims[j] << " ";
+          std::cout << "\nInput Type : " << dtypes[i].code;
+
+          //Update the node name by assuming each graph input has unique JSONGraphNode
+          //i loop runs only once in our case
+          auto mwnn_type = get_mwnn_type_tvm(dtypes[i].code);
+          metawarenn::MWNNValueInfo mwnn_input(name, dims, mwnn_type);
+          std::string ip_name = mwnn_input.get_name();
+          mwnn_graph_->set_graph_ip_names(ip_name);
+          auto ip_node = mwnn_input.get_node();
+          mwnn_graph_->mwnn_graph_nodes[ip_name] = std::move(ip_node);
+          //Fills Graph Input Tensor Details - Name, Dims
+          metawarenn::MWNNTensor mwnn_ip_tensor(mwnn_input.get_name(), mwnn_input.get_type(), mwnn_input.get_dims());
+          mwnn_graph_->set_graph_ip_tensor(mwnn_ip_tensor);
+        }
       }
       else if (node.GetOpType() == "const") {
         uint32_t eid = EntryID(nid, 0);
         std::string name = "node_" + std::to_string(nid);
-        mwnn_graph_->set_graph_initializers(name, data_entry_[eid]);
+        const DLTensor* data = data_entry_[eid];
+        std::vector<int> dims(data->shape, data->shape + data->ndim);
+        auto total_elements = std::accumulate(begin(dims), end(dims), 1, std::multiplies<int>());
+        std::vector<float> tensor_vec(((float*)(data->data)), ((float*)(data->data)) + total_elements);
+
+        auto mwnn_type = get_mwnn_type_tvm(data->dtype.code);
+        metawarenn::MWNNTensor mwnn_tensor(name, dims, mwnn_type, tensor_vec);
+        mwnn_graph_->set_graph_initializers(mwnn_tensor);
+        mwnn_graph_->mwnn_initializer_names.insert(name);
+        auto const_node = mwnn_tensor.get_constant_node();
+        mwnn_graph_->mwnn_graph_nodes[mwnn_tensor.get_name()] = std::move(const_node);
       }
     }
+  }
+
+  static metawarenn::ElementType::element_type get_mwnn_type_tvm(uint8_t tvm_type) {
+      switch (tvm_type) {
+          case kDLFloat:
+              return metawarenn::ElementType::element_type::float_;
+          case kDLInt:
+              return metawarenn::ElementType::element_type::int32_;
+          case kDLUInt:
+              return metawarenn::ElementType::element_type::uint32_;
+          default:
+              return metawarenn::ElementType::element_type::dynamic_;
+      }
   }
 
   void ApplyPasses() {
