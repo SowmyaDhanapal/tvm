@@ -41,7 +41,7 @@
 #include "metawarenn_lib/mwnn_inference_api/mwnn_inference_api.h"
 #include "metawarenn_lib/mwnnconvert/mwnn_protobuf/cpp_wrapper/MWNN.pb.h"
 #define CHW_TO_HWC 0
-#define INVOKE_NNAC 1
+#define INVOKE_NNAC 0
 
 namespace tvm {
 namespace runtime {
