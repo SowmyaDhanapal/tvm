@@ -2,21 +2,27 @@
 
 ### Prerequisites
 #### Clone the TVM & Dependencies
-   1. `git clone --recursive https://github.com/SowmyaDhanapal/tvm.git tvm`
-   2. cd tvm
-   3. git checkout metawarenn_dev
-   4. git submodule sync
-   5. git submodule update
-   6. MetaWareNN Library submodule setup
-      * `git submodule update --init --recursive`
-      *  Move to metawarenn_lib submodule and checkout to metawarenn_dev branch
-         a. `cd tvm/src/runtime/contrib/metawarenn/metawarenn_lib`
-         b. `git checkout metawarenn_dev`
-      *  Once initial submodule setup is done with above commands, use this command to pull from the submodule in future
-         i.  `cd /path/to/tvm`
-         ii. `git pull --recurse-submodules`
-   7. sudo apt-get update
-   8. sudo apt-get install -y python3 python3-dev python3-setuptools gcc libtinfo-dev zlib1g-dev build-essential cmake libedit-dev libxml2-dev
+   ### Initial Setup
+      1. `git clone --recursive https://github.com/SowmyaDhanapal/tvm.git tvm`
+      2. cd tvm
+      3. git checkout metawarenn_dev
+      4. git submodule sync
+      5. git submodule update
+      6. In case if tvm is cloned without metawarenn_lib submodule, use below commands to pull MetaWareNN Library Submodule for the first time
+         * `git pull`
+         * `git submodule update --init --recursive`
+         *  Move to metawarenn_lib submodule and checkout to metawarenn_dev branch
+            a. `cd tvm/src/runtime/contrib/metawarenn/metawarenn_lib`
+            b. `git checkout metawarenn_dev`
+   ### Using Existing Setup
+      1. `cd tvm`
+      2. `git pull`
+      3. `cd tvm/src/runtime/contrib/metawarenn/metawarenn_lib`
+      4. `git checkout metawarenn_dev`
+      5. `git pull`
+   ### Install Dependent System Libraries
+      1. sudo apt-get update
+      2. sudo apt-get install -y python3 python3-dev python3-setuptools gcc libtinfo-dev zlib1g-dev build-essential cmake libedit-dev libxml2-dev
 #### Install Python Virtual Environment
    1. virtualenv --python=/usr/bin/python3.6 ./tvm_env
    2. source ./tvm_env/bin/activate
@@ -48,14 +54,12 @@
 
 ### Modifications to make before build
 #### To Load MetaWareNN Executable Graph in Shared Memory [Default flow]
-   1. Update tvm/src/runtime/contrib/metawarenn/metawarenn_lib/metawarenn_common.h file
-        a. Set Macro ONNX to 0 and TVM to 1 in line number 4 and 7
-   2. Set path to tvm in tvm/metawarenn_inference/env.sh line no: 5
+   1. Set path to tvm in tvm/metawarenn_inference/env.sh line no: 5
 #### To Invoke the NNAC & EVGENCNN Script to generate the EV Binary file
    1. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_json_runtime.cc" file as follows:  
       i. Set the INVOKE_NNAC macro to 1 in line no: 44
    2. Set path to ARC/ directory in tvm/metawarenn_inference/env.sh line no: 11
-   [Note] : Generated EV Binary file for MetaWareNN SubGraph will be stored in evgencnn/scripts folder.  
+   [Note] : Generated EV Binary file for MetaWareNN SubGraph will be stored in evgencnn/scripts folder and all intermediate files will get stored in `/path/to/tvm/NNAC_DUMPS` folder
 
 ### Steps to build
    1. mkdir build
@@ -72,18 +76,15 @@
    8. python setup.py install --user
 
 ### To Run the Inference Script 
-   1. export TVM_HOME=/path/to/tvm
-   2. export PYTHONPATH=$TVM_HOME/python:${PYTHONPATH}
-   3. cd /path/to/tvm/metawarenn_inference
+   1. cd /path/to/tvm/metawarenn_inference
+   2. source env.sh
+   3. export PYTHONPATH=$FRAMEWORK_PATH/python:${PYTHONPATH}
    4. Update the ONNX model path in line no: 9
-   5. source env.sh
-   6. python mwnn_inference.py
+   5. python mwnn_inference.py
 
 ### To Run the Inference for multiple models
-   1. export TVM_HOME=/path/to/tvm
-   2. export PYTHONPATH=$TVM_HOME/python:${PYTHONPATH}
-   3. cd /path/to/tvm/metawarenn_inference
-   4. sh download_onnx_models.sh
-   5. Update the path to downloaded ONNX models by setting the path to tvm in metawarenn_inference/inference_regression.py file in line no: 9
-   6. source env.sh
-   7. python inference_regression.py
+   1. cd /path/to/tvm/metawarenn_inference
+   2. source env.sh
+   3. export PYTHONPATH=$FRAMEWORK_PATH/python:${PYTHONPATH}
+   4. sh download_onnx_models.sh # Creates onnx_models directory inside tvm/ & downloads models into it
+   5. python inference_regression.py

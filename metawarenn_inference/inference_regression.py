@@ -6,7 +6,8 @@ import os
 from typing import List
 
 dtype = "float32"
-model_dir = "/Path/to/tvm/metawarenn_inference/onnx_models/"
+tvm_path = os.environ['FRAMEWORK_PATH']
+model_dir = tvm_path + "/onnx_models/"
 f = open("models.txt", "r")
 
 for line in f:
