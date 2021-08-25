@@ -49,9 +49,6 @@
       export CPLUS_INCLUDE_PATH=install_protobuf_folder/include:${CPLUS_INCLUDE_PATH}  
 ```
 
-    2. Download protobuf library version 3.11.3 from the egnyte link https://multicorewareinc.egnyte.com/dl/FjljPlgjlI  
-    3. Unzip and move the "libprotobuf.so" to "/path/to/tvm/metawarenn_inference"  
-
 ### Modifications to make before build
 #### To Load MetaWareNN Executable Graph in Shared Memory [Default flow]
    1. Set path to tvm in tvm/metawarenn_inference/env.sh line no: 5
@@ -59,7 +56,13 @@
    1. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_json_runtime.cc" file as follows:  
       i. Set the INVOKE_NNAC macro to 1 in line no: 44
    2. Set path to ARC/ directory in tvm/metawarenn_inference/env.sh line no: 11
+   3. Set path to EV_CNNMODELS_HOME/ directory in tvm/metawarenn_inference/env.sh line no: 12
    [Note] : Generated EV Binary file for MetaWareNN SubGraph will be stored in evgencnn/scripts folder and all intermediate files will get stored in `/path/to/tvm/NNAC_DUMPS` folder
+#### To use metawarenn_lib as shared library
+   1. Rename tvm/cmake/modules/contrib/MetaWareNN.cmake to MetaWareNN_original.cmake
+      `mv tvm/cmake/modules/contrib/MetaWareNN.cmake tvm/cmake/modules/contrib/MetaWareNN_original.cmake`
+   2. Rename tvm/cmake/modules/contrib/MetaWareNN_shared_lib.cmake to MetaWareNN.cmake
+      `mv tvm/cmake/modules/contrib/MetaWareNN_shared_lib.cmake tvm/cmake/modules/contrib/MetaWareNN.cmake`
 
 ### Steps to build
    1. mkdir build
