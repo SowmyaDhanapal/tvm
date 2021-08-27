@@ -353,17 +353,16 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
 
     //Add Outputs
     auto mwnn_type = get_mwnn_type_tvm(dtypes[0].code);
-    metawarenn::MWNNValueInfo mwnn_output(op_name, dims, mwnn_type);
-    mwnn_graph_->set_graph_op_names(mwnn_output.get_name());
     //Fills Graph Output Tensor Details - Name, Dims
-    metawarenn::MWNNTensor mwnn_op_tensor(mwnn_output.get_name(), mwnn_output.get_type(), mwnn_output.get_dims());
+    metawarenn::MWNNTensor mwnn_op_tensor(op_name, mwnn_type, dims);
     mwnn_graph_->set_graph_op_tensor(mwnn_op_tensor);
+    mwnn_graph_->set_graph_op_names(mwnn_op_tensor.get_name());
 
     // Add inputs and constants.
     for (size_t i = 0; i < input_nodes_.size(); ++i) {
       auto nid = input_nodes_[i];
       const auto& node = nodes_[nid];
-      std::string name = "node_" + std::to_string(nid);
+      std::string ip_name = "node_" + std::to_string(nid);
       if (node.GetOpType() == "input") {
         auto shapes = node.GetOpShape();
         auto dtypes = node.GetOpDataType();
@@ -374,7 +373,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           std::vector<int> dims(size);
           for(int d = 0; d < size; d++)
             dims[d] = shape[d];
-          std::cout << "\nInput Name : " << name;
+          std::cout << "\nInput Name : " << ip_name;
           std::cout << "\nInput Dims : ";
           for(int j=0; j<dims.size(); j++)
             std::cout << dims[j] << " ";
@@ -383,13 +382,12 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           //Update the node name by assuming each graph input has unique JSONGraphNode
           //i loop runs only once in our case
           auto mwnn_type = get_mwnn_type_tvm(dtypes[i].code);
-          metawarenn::MWNNValueInfo mwnn_input(name, dims, mwnn_type);
-          std::string ip_name = mwnn_input.get_name();
-          mwnn_graph_->set_graph_ip_names(ip_name);
-          auto ip_node = mwnn_input.get_node();
-          mwnn_graph_->mwnn_graph_nodes[ip_name] = std::move(ip_node);
+
           //Fills Graph Input Tensor Details - Name, Dims
-          metawarenn::MWNNTensor mwnn_ip_tensor(mwnn_input.get_name(), mwnn_input.get_type(), mwnn_input.get_dims());
+          metawarenn::MWNNTensor mwnn_ip_tensor(ip_name, mwnn_type, dims);
+          mwnn_graph_->set_graph_ip_names(ip_name);
+          auto ip_node = mwnn_ip_tensor.get_node();
+          mwnn_graph_->mwnn_graph_nodes[ip_name] = std::move(ip_node);
           mwnn_graph_->set_graph_ip_tensor(mwnn_ip_tensor);
         }
       }
