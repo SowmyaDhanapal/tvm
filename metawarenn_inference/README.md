@@ -26,6 +26,13 @@
 #### Install Python Virtual Environment
    1. virtualenv --python=/usr/bin/python3.6 ./tvm_env
    2. source ./tvm_env/bin/activate
+
+#### Install dependent python packages
+   1. pip3 install numpy decorator attrs
+   2. pip3 install tornado
+   3. pip3 install onnx
+   4. pip3 install psutil xgboost cloudpickle
+   5. pip3 install tflite==2.3.0
 #### Protobuf library dependencies
    1. Requird Protobuf Version - 3.11.3. Check with the following command:
       `protoc --version`
@@ -70,13 +77,8 @@
    3. cd build
    4. cmake ..
    5. make -j4
-   6. Install the following python packages to meet the dependencies,
-       1. pip3 install numpy decorator attrs
-       2. pip3 install tornado
-       3. pip3 install onnx
-       4. pip3 install psutil xgboost cloudpickle
-   7. cd tvm/python
-   8. python setup.py install --user
+   6. cd tvm/python
+   7. python setup.py install --user
 
 ### To Run the Inference Script 
    1. cd /path/to/tvm/metawarenn_inference
@@ -84,8 +86,14 @@
    3. Update the ONNX model path in line no: 9
    4. python mwnn_inference.py
 
-### To Run the Inference for multiple models
+### To Run the Inference for multiple ONNX models
    1. cd /path/to/tvm/metawarenn_inference
    2. source env.sh
    3. sh download_onnx_models.sh # Creates onnx_models directory inside tvm/ & downloads models into it
    4. python inference_regression.py
+
+### To Run the Inference for multiple TFLite models
+   1. cd /path/to/tvm/metawarenn_inference
+   2. source env.sh
+   3. sh download_tflite_models.sh # Creates tflite_models directory inside tvm/ & downloads models into it
+   4. python inference_regression_tflite.py
