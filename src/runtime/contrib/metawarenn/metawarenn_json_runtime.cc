@@ -320,6 +320,55 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           node_op_type = "Mul";
           node_name = node_op_type + std::to_string(layer_count++);
         }
+        else if (node.GetOpName() == "mean") {
+          node_op_type = "Mean";
+          node_name = node_op_type + std::to_string(layer_count++);
+          auto axis = node.GetAttr<std::vector<std::string>>("axis");
+          std::vector<int> int_axis(axis.size());
+          std::transform(axis.begin(), axis.end(), std::back_inserter(int_axis),
+                        [](const std::string& str) { return std::stoi(str); });
+          metawarenn::MWNNAttribute mwnn_attr_axis("axis", int_axis);
+          node_attributes.emplace_back(mwnn_attr_axis);
+        }
+        else if (node.GetOpName() == "split") {
+          node_op_type = "Split";
+          node_name = node_op_type + std::to_string(layer_count++);
+          auto indices_or_sections = node.GetAttr<std::vector<std::string>>("indices_or_sections");
+          auto axis = node.GetAttr<std::vector<std::string>>("axis");
+          metawarenn::MWNNAttribute mwnn_attr_ios("indices_or_sections", std::vector<int>({std::stoi(indices_or_sections[0])}));
+          node_attributes.emplace_back(mwnn_attr_ios);
+          metawarenn::MWNNAttribute mwnn_attr_axis("axis", std::vector<int>({std::stoi(axis[0])}));
+          node_attributes.emplace_back(mwnn_attr_axis);
+        }
+        else if (node.GetOpName() == "strided_slice") {
+          node_op_type = "StridedSlice";
+          node_name = node_op_type + std::to_string(layer_count++);
+          auto begin = node.GetAttr<std::vector<std::string>>("begin");
+          auto end = node.GetAttr<std::vector<std::string>>("end");
+          auto strides = node.GetAttr<std::vector<std::string>>("strides");
+
+          std::vector<int> int_begin(begin.size());
+          std::vector<int> int_end(end.size());
+          std::vector<int> int_strides(strides.size());
+
+          std::transform(begin.begin(), begin.end(), std::back_inserter(int_begin),
+                        [](const std::string& str) { return std::stoi(str); });
+          std::transform(end.begin(), end.end(), std::back_inserter(int_end),
+                        [](const std::string& str) { return std::stoi(str); });
+          std::transform(strides.begin(), strides.end(), std::back_inserter(int_strides),
+                        [](const std::string& str) { return std::stoi(str); });
+
+          metawarenn::MWNNAttribute mwnn_attr_begin("begin_mask", int_begin);
+          node_attributes.emplace_back(mwnn_attr_begin);
+          metawarenn::MWNNAttribute mwnn_attr_end("end_mask", int_end);
+          node_attributes.emplace_back(mwnn_attr_end);
+          metawarenn::MWNNAttribute mwnn_attr_strides("strides", int_strides);
+          node_attributes.emplace_back(mwnn_attr_strides);
+        }
+        else if (node.GetOpName() == "nn.softmax") {
+          node_op_type = "Softmax";
+          node_name = node_op_type + std::to_string(layer_count++);
+        }
         else if (node.GetOpName() == "reshape") {
           node_op_type = "Reshape";
           node_name = node_op_type + std::to_string(layer_count++);

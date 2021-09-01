@@ -55,6 +55,7 @@ _register_external_op_helper("nn.avg_pool2d")
 _register_external_op_helper("nn.dense")
 _register_external_op_helper("nn.batch_flatten")
 _register_external_op_helper("nn.lrn")
+_register_external_op_helper("nn.softmax")
 _register_external_op_helper("add")
 _register_external_op_helper("multiply")
 _register_external_op_helper("max")
@@ -69,6 +70,9 @@ _register_external_op_helper("clip")
 _register_external_op_helper("squeeze")
 _register_external_op_helper("concatenate")
 _register_external_op_helper("reshape")
+_register_external_op_helper("mean")
+_register_external_op_helper("split")
+_register_external_op_helper("strided_slice")
 
 def partition_for_metawarenn(mod, params=None):
     """Partition the graph greedily offloading supported operators to MetaWareNN.
