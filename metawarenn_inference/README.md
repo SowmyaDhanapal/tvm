@@ -27,9 +27,9 @@
    1. virtualenv --python=/usr/bin/python3.6 ./tvm_env
    2. source ./tvm_env/bin/activate
 #### Protobuf library dependencies
-   1. Requird Protobuf Version - 3.11.3. Check with the following command:  
-      `protoc --version`  
-      + Steps to install Protobuf 3.11.3:  
+   1. Requird Protobuf Version - 3.11.3. Check with the following command:
+      `protoc --version`
+      + Steps to install Protobuf 3.11.3:
 ```
       wget https://github.com/protocolbuffers/protobuf/releases/download/v3.11.3/protobuf-all-3.11.3.tar.gz
       tar -xf protobuf-all-3.11.3.tar.gz
@@ -43,17 +43,17 @@
       python3 setup.py test
       sudo python3 setup.py install
       sudo ldconfig
-      # if not installed with sudo  
-      export PATH=install_protobuf_folder/bin:${PATH}  
-      export LD_LIBRARY_PATH=install_protobuf_folder/lib:${LD_LIBRARY_PATH}  
-      export CPLUS_INCLUDE_PATH=install_protobuf_folder/include:${CPLUS_INCLUDE_PATH}  
+      # if not installed with sudo
+      export PATH=install_protobuf_folder/bin:${PATH}
+      export LD_LIBRARY_PATH=install_protobuf_folder/lib:${LD_LIBRARY_PATH}
+      export CPLUS_INCLUDE_PATH=install_protobuf_folder/include:${CPLUS_INCLUDE_PATH}
 ```
 
 ### Modifications to make before build
 #### To Load MetaWareNN Executable Graph in Shared Memory [Default flow]
    1. Set path to tvm in tvm/metawarenn_inference/env.sh line no: 5
 #### To Invoke the NNAC & EVGENCNN Script to generate the EV Binary file
-   1. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_json_runtime.cc" file as follows:  
+   1. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_json_runtime.cc" file as follows:
       i. Set the INVOKE_NNAC macro to 1 in line no: 44
    2. Set path to ARC/ directory in tvm/metawarenn_inference/env.sh line no: 11
    3. Set path to EV_CNNMODELS_HOME/ directory in tvm/metawarenn_inference/env.sh line no: 12
@@ -81,13 +81,11 @@
 ### To Run the Inference Script 
    1. cd /path/to/tvm/metawarenn_inference
    2. source env.sh
-   3. export PYTHONPATH=$FRAMEWORK_PATH/python:${PYTHONPATH}
-   4. Update the ONNX model path in line no: 9
-   5. python mwnn_inference.py
+   3. Update the ONNX model path in line no: 9
+   4. python mwnn_inference.py
 
 ### To Run the Inference for multiple models
    1. cd /path/to/tvm/metawarenn_inference
    2. source env.sh
-   3. export PYTHONPATH=$FRAMEWORK_PATH/python:${PYTHONPATH}
-   4. sh download_onnx_models.sh # Creates onnx_models directory inside tvm/ & downloads models into it
-   5. python inference_regression.py
+   3. sh download_onnx_models.sh # Creates onnx_models directory inside tvm/ & downloads models into it
+   4. python inference_regression.py
