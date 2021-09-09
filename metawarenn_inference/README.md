@@ -1,7 +1,20 @@
 ## Build TVM MetaWareNN Backend
 
+## Use Docker Setup to build and run the TVM
+##### Check on the [tvm/metawarenn_inference/Docker/README.md](https://github.com/SowmyaDhanapal/tvm/tree/metawarenn_dev/metawarenn_inference/Docker/README.md)
+
+## No Docker Process
+### Get TVM
+
 ### Prerequisites
 #### Clone the TVM & Dependencies
+  #### Install git lfs
+    * Check git lfs installation with this command `git lfs --version`
+    * If not installed, run below commands to install it.
+      * `wget https://github.com/git-lfs/git-lfs/releases/download/v2.13.3/git-lfs-linux-amd64-v2.13.3.tar.gz`
+      * `tar -xf git-lfs-linux-amd64-v2.13.3.tar.gz`
+      * `chmod 755 install.sh`
+      * `./install.sh`
    ### Initial Setup
       1. `git clone --recursive https://github.com/SowmyaDhanapal/tvm.git tvm`
       2. cd tvm
@@ -14,12 +27,15 @@
          *  Move to metawarenn_lib submodule and checkout to metawarenn_dev branch
             a. `cd tvm/src/runtime/contrib/metawarenn/metawarenn_lib`
             b. `git checkout metawarenn_dev`
-   ### Using Existing Setup
+            c. `git lfs install` #Initializes git lfs in metawarenn_lib submodule
+            d. `git lfs pull`
+   ### Using Existing Setup to pull submodule changes [Docker / Non-Docker]
       1. `cd tvm`
       2. `git pull`
       3. `cd tvm/src/runtime/contrib/metawarenn/metawarenn_lib`
       4. `git checkout metawarenn_dev`
       5. `git pull`
+      6. `git lfs pull`
    ### Install Dependent System Libraries
       1. sudo apt-get update
       2. sudo apt-get install -y python3 python3-dev python3-setuptools gcc libtinfo-dev zlib1g-dev build-essential cmake libedit-dev libxml2-dev
@@ -27,12 +43,6 @@
    1. virtualenv --python=/usr/bin/python3.6 ./tvm_env
    2. source ./tvm_env/bin/activate
 
-#### Install dependent python packages
-   1. pip3 install numpy decorator attrs
-   2. pip3 install tornado
-   3. pip3 install onnx
-   4. pip3 install psutil xgboost cloudpickle
-   5. pip3 install tflite==2.3.0
 #### Protobuf library dependencies
    1. Requird Protobuf Version - 3.11.3. Check with the following command:
       `protoc --version`
@@ -55,6 +65,13 @@
       export LD_LIBRARY_PATH=install_protobuf_folder/lib:${LD_LIBRARY_PATH}
       export CPLUS_INCLUDE_PATH=install_protobuf_folder/include:${CPLUS_INCLUDE_PATH}
 ```
+
+#### Install dependent python packages
+   1. pip3 install numpy decorator attrs
+   2. pip3 install tornado
+   3. pip3 install onnx
+   4. pip3 install psutil xgboost cloudpickle
+   5. pip3 install tflite==2.3.0
 
 ### Modifications to make before build
 #### To Load MetaWareNN Executable Graph in Shared Memory [Default flow]
@@ -83,7 +100,7 @@
 ### To Run the Inference Script 
    1. cd /path/to/tvm/metawarenn_inference
    2. source env.sh
-   3. Update the ONNX model path in line no: 9
+   3. Update the ONNX model path in line no: 8
    4. python mwnn_inference.py
 
 ### To Run the Inference for multiple ONNX models
