@@ -416,21 +416,19 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         auto shapes = node.GetOpShape();
         auto dtypes = node.GetOpDataType();
 
-        for (size_t i = 0; i < shapes.size(); ++i) {
-          auto shape = shapes[i];
+        for (size_t j = 0; j < shapes.size(); ++j) {
+          auto shape = shapes[j];
           int size = shape.size();
           std::vector<int> dims(size);
           for(int d = 0; d < size; d++)
             dims[d] = shape[d];
           std::cout << "\nInput Name : " << ip_name;
           std::cout << "\nInput Dims : ";
-          for(int j=0; j<dims.size(); j++)
-            std::cout << dims[j] << " ";
-          std::cout << "\nInput Type : " << dtypes[i].code;
+          for(int k=0; k < dims.size(); k++)
+            std::cout << dims[k] << " ";
 
-          //Update the node name by assuming each graph input has unique JSONGraphNode
-          //i loop runs only once in our case
-          auto mwnn_type = get_mwnn_type_tvm(dtypes[i].code);
+          auto mwnn_type = get_mwnn_type_tvm(dtypes[j].code);
+          std::cout << "\nInput Type : " << (int)mwnn_type;
 
           //Fills Graph Input Tensor Details - Name, Dims
           metawarenn::MWNNTensor mwnn_ip_tensor(ip_name, mwnn_type, dims);

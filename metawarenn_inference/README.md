@@ -8,13 +8,6 @@
 
 ### Prerequisites
 #### Clone the TVM & Dependencies
-  #### Install git lfs
-    * Check git lfs installation with this command `git lfs --version`
-    * If not installed, run below commands to install it.
-      * `wget https://github.com/git-lfs/git-lfs/releases/download/v2.13.3/git-lfs-linux-amd64-v2.13.3.tar.gz`
-      * `tar -xf git-lfs-linux-amd64-v2.13.3.tar.gz`
-      * `chmod 755 install.sh`
-      * `./install.sh`
    ### Initial Setup
       1. `git clone --recursive https://github.com/SowmyaDhanapal/tvm.git tvm`
       2. cd tvm
@@ -27,15 +20,12 @@
          *  Move to metawarenn_lib submodule and checkout to metawarenn_dev branch
             a. `cd tvm/src/runtime/contrib/metawarenn/metawarenn_lib`
             b. `git checkout metawarenn_dev`
-            c. `git lfs install` #Initializes git lfs in metawarenn_lib submodule
-            d. `git lfs pull`
    ### Using Existing Setup to pull submodule changes [Docker / Non-Docker]
       1. `cd tvm`
       2. `git pull`
       3. `cd tvm/src/runtime/contrib/metawarenn/metawarenn_lib`
       4. `git checkout metawarenn_dev`
       5. `git pull`
-      6. `git lfs pull`
    ### Install Dependent System Libraries
       1. sudo apt-get update
       2. sudo apt-get install -y python3 python3-dev python3-setuptools gcc libtinfo-dev zlib1g-dev build-essential cmake libedit-dev libxml2-dev
@@ -75,18 +65,24 @@
 
 ### Modifications to make before build
 #### To Load MetaWareNN Executable Graph in Shared Memory [Default flow]
+  ```
    1. Set path to tvm in tvm/metawarenn_inference/env.sh line no: 5
+  ```
 #### To Invoke the NNAC & EVGENCNN Script to generate the EV Binary file
+  ```
    1. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_json_runtime.cc" file as follows:
       i. Set the INVOKE_NNAC macro to 1 in line no: 44
    2. Set path to ARC/ directory in tvm/metawarenn_inference/env.sh line no: 11
    3. Set path to EV_CNNMODELS_HOME/ directory in tvm/metawarenn_inference/env.sh line no: 12
    [Note] : Generated EV Binary file for MetaWareNN SubGraph will be stored in evgencnn/scripts folder and all intermediate files will get stored in `/path/to/tvm/NNAC_DUMPS` folder
+  ```
 #### To use metawarenn_lib as shared library
    1. Rename tvm/cmake/modules/contrib/MetaWareNN.cmake to MetaWareNN_original.cmake
       `mv tvm/cmake/modules/contrib/MetaWareNN.cmake tvm/cmake/modules/contrib/MetaWareNN_original.cmake`
    2. Rename tvm/cmake/modules/contrib/MetaWareNN_shared_lib.cmake to MetaWareNN.cmake
       `mv tvm/cmake/modules/contrib/MetaWareNN_shared_lib.cmake tvm/cmake/modules/contrib/MetaWareNN.cmake`
+   3. Download the metawarenn shared library from egnyte link https://multicorewareinc.egnyte.com/dl/n31afFTwP9 and place it in `tvm/src/runtime/contrib/metawarenn/metawarenn_lib/lib`
+   4. Also download the dependent protobuf library from egnyte link https://multicorewareinc.egnyte.com/dl/kpRzPTSFdx and place it in `tvm/src/runtime/contrib/metawarenn/metawarenn_lib/lib`
 
 ### Steps to build
    1. mkdir build

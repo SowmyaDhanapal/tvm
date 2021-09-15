@@ -11,10 +11,6 @@ apt-get -y install libssl-dev
 apt-get -y install python3-pip
 apt-get -y install llvm
 apt-get install -y python3 python3-dev python3-setuptools gcc libtinfo-dev zlib1g-dev cmake libedit-dev libxml2-dev
-wget https://github.com/git-lfs/git-lfs/releases/download/v2.13.3/git-lfs-linux-amd64-v2.13.3.tar.gz
-tar -xf git-lfs-linux-amd64-v2.13.3.tar.gz
-chmod 755 install.sh
-./install.sh
 wget https://github.com/protocolbuffers/protobuf/releases/download/v3.11.3/protobuf-all-3.11.3.tar.gz
 tar -xf protobuf-all-3.11.3.tar.gz
 cd protobuf-3.11.3
@@ -43,5 +39,3 @@ git submodule update
 git submodule update --init --recursive
 cd src/runtime/contrib/metawarenn/metawarenn_lib
 git checkout metawarenn_dev
-git lfs install
-git lfs pull
