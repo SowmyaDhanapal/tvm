@@ -517,6 +517,31 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     ::metawarenn::optimizer::CalculateOffset co(graph_);
     manager.register_pass(co);
     manager.run_passes();
+
+    auto graph_ip_names = graph_->get_graph_ip_names();
+    for (auto g_n : graph_->get_graph_nodes()) {
+      for (auto n_ip : g_n.get_inputs()) {
+        if(!(graph_->initializer_names.count(n_ip)) && !(std::count(graph_ip_names.begin(), graph_ip_names.end(), n_ip))) {
+          if (graph_->get_node_producers().count(n_ip)) {
+            graph_->set_node_consumer(n_ip, g_n.get_name());
+          }
+        }
+      }
+      for (auto n_op : g_n.get_outputs()) {
+        graph_->set_node_producer(n_op, g_n.get_name());
+      }
+    }
+    for (auto itr : graph_->get_node_producers()) {
+      std::cout << "\n Produced Tensor : " << itr.first;
+      std::cout << "\n      Producer Node : " << itr.second;
+    }
+    for (auto itr : graph_->get_node_consumers()) {
+      std::cout << "\n Consumed Tensor : " << itr.first;
+      auto& vitr = itr.second;
+      for (auto node_name : vitr) {
+          std::cout << "\n      Consumer Node - " << node_name;
+      }
+    }
   }
 
   void InvokeNNAC() {
@@ -617,6 +642,26 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         initializer->add_float_data(t_val);
       }
     }
+    std::cout << "\n -----------------------Graph Tensor Producers-------------------------- \n";
+    for (auto producer : graph_->get_node_producers()) {
+      std::cout << "\n Produced Tensor : " << producer.first;
+      std::cout << "\n      Producer Node : " << producer.second;
+      auto pnode = graph_proto.add_producers();
+      pnode->set_tensor_name(producer.first);
+      pnode->add_node_name(producer.second);
+    }
+    std::cout << "\n -----------------------Graph Tensor Consumers-------------------------- \n";
+    for (auto consumer : graph_->get_node_consumers()) {
+      std::cout << "\n Consumed Tensor : " << consumer.first;
+      auto& consumer_nodes = consumer.second;
+      auto cnode = graph_proto.add_consumers();
+      cnode->set_tensor_name(consumer.first);
+      for (auto node_name : consumer_nodes) {
+        std::cout << "\n      Consumer Node - " << node_name;
+        cnode->add_node_name(node_name);
+        }
+    }
+
     std::string name = graph_->get_name();
     char* op_path = nullptr;
     op_path = getenv("NNAC_DUMPS_PATH");
