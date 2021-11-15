@@ -156,7 +156,6 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         std::vector<std::string> node_outputs;
         std::vector<metawarenn::Attribute> node_attributes;
         int out_index = 1;
-
         //Node Inputs Parsing
         for (size_t i = 0; i < node.GetInputs().size(); ++i) {
           auto in_node = node.GetInputs()[i];
@@ -193,9 +192,37 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           node_attributes.emplace_back(attr_pad);
           metawarenn::Attribute attr_stride("strides", std::vector<int>({std::stoi(strides[0]), std::stoi(strides[1])}));
           node_attributes.emplace_back(attr_stride);
+        }
+        else if (node.GetOpName() == "nn.conv2d_transpose") {
+          node_op_type = "ConvTranspose";
+          node_name = node_op_type + std::to_string(layer_count++);
+          std::vector<std::string> strides = node.GetAttr<std::vector<std::string>>("strides");
+          std::vector<std::string> pads = node.GetAttr<std::vector<std::string>>("padding");
+          std::vector<std::string> dilations = node.GetAttr<std::vector<std::string>>("dilation");
+          std::vector<std::string> op_padding = node.GetAttr<std::vector<std::string>>("output_padding");
+          int group = std::stoi(node.GetAttr<std::vector<std::string>>("groups")[0]);
+          auto weight_entry = node.GetInputs()[1];
+          std::vector<long int> kernel_shape = nodes_[weight_entry.id_].GetOpShape()[weight_entry.index_];
+          std::vector<int> op_dims;
+          for(int m = 0; m < 1; m++)
+            for(int n = 0; n < op_shape[m].size(); n++) {
+              op_dims.push_back(op_shape[m][n]);
+            }
 
-          //metawarenn::Attribute attribute("activation", std::vector<int>({0}));
-          //node_attributes.emplace_back(attribute);
+          metawarenn::Attribute attr_dilate("dilations", std::vector<int>({std::stoi(dilations[0]), std::stoi(dilations[1])}));
+          node_attributes.emplace_back(attr_dilate);
+          metawarenn::Attribute attr_group("group", std::vector<int>({group}));
+          node_attributes.emplace_back(attr_group);
+          metawarenn::Attribute attr_kernel_shape("kernel_shape", std::vector<int>({kernel_shape[2], kernel_shape[3]}));
+          node_attributes.emplace_back(attr_kernel_shape);
+          metawarenn::Attribute attr_op_padding("output_padding", std::vector<int>({std::stoi(op_padding[0]), std::stoi(op_padding[1])}));
+          node_attributes.emplace_back(attr_op_padding);
+          metawarenn::Attribute attr_op_shape("output_shape", op_dims);
+          node_attributes.emplace_back(attr_op_shape);
+          metawarenn::Attribute attr_pad("pads", std::vector<int>({std::stoi(pads[0]), std::stoi(pads[1]), std::stoi(pads[2]), std::stoi(pads[3])}));
+          node_attributes.emplace_back(attr_pad);
+          metawarenn::Attribute attr_stride("strides", std::vector<int>({std::stoi(strides[0]), std::stoi(strides[1])}));
+          node_attributes.emplace_back(attr_stride);
         }
         else if (node.GetOpName() == "nn.batch_norm") {
           node_op_type = "BatchNormalization";
@@ -203,10 +230,13 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           float epsilon = std::stof(node.GetAttr<std::vector<std::string>>("epsilon")[0]);
           metawarenn::Attribute attr_epsilon("epsilon", std::vector<float>({epsilon}));
           node_attributes.emplace_back(attr_epsilon);
-          metawarenn::Attribute attr_momentum("momentum", std::vector<float>({0.9}));
-          node_attributes.emplace_back(attr_momentum);
-          metawarenn::Attribute attr_training_mode("training_mode", std::vector<int>({0}));
-          node_attributes.emplace_back(attr_training_mode);
+        }
+        else if (node.GetOpName() == "nn.instance_norm") {
+          node_op_type = "InstanceNormalization";
+          node_name = node_op_type + std::to_string(layer_count++);
+          float epsilon = std::stof(node.GetAttr<std::vector<std::string>>("epsilon")[0]);
+          metawarenn::Attribute attr_epsilon("epsilon", std::vector<float>({epsilon}));
+          node_attributes.emplace_back(attr_epsilon);
         }
         else if (node.GetOpName() == "nn.relu") {
           node_op_type = "Relu";
@@ -267,6 +297,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           auto beta = node.GetAttr<std::vector<std::string>>("beta");
           auto size = node.GetAttr<std::vector<std::string>>("size");
           auto bias = node.GetAttr<std::vector<std::string>>("bias");
+
           metawarenn::Attribute attr_alpha("alpha", std::vector<float>({std::stof(alpha[0])}));
           node_attributes.emplace_back(attr_alpha);
           metawarenn::Attribute attr_beta("beta", std::vector<float>({std::stof(beta[0])}));
@@ -275,25 +306,22 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           node_attributes.emplace_back(attr_bias);
           metawarenn::Attribute attr_size("size", std::vector<int>({std::stoi(size[0])}));
           node_attributes.emplace_back(attr_size);
-          /*auto axis = node.GetAttr<std::vector<std::string>>("axis");
-          metawarenn::Attribute attr_axis("axis", std::vector<int>({std::stoi(axis[0])}));
-          node_attributes.emplace_back(attr_axis);*/
         }
         else if (node.GetOpName() == "nn.batch_flatten") {
           node_op_type = "BatchFlatten";
           node_name = node_op_type + std::to_string(layer_count++);
         }
-        else if (node.GetOpName() == "nn.dense") {
+        /*else if (node.GetOpName() == "nn.dense") {
           node_op_type = "Dense";
           node_name = node_op_type + std::to_string(layer_count++);
-          /*auto units = node.GetAttr<std::vector<std::string>>("units");
+          auto units = node.GetAttr<std::vector<std::string>>("units");
           metawarenn::Attribute attr_units("units", std::vector<int>({std::stoi(units[0])}));
-          node_attributes.emplace_back(attr_units);*/
+          node_attributes.emplace_back(attr_units);
         }
         else if (node.GetOpName() == "nn.bias_add") {
           node_op_type = "BiasAdd";
           node_name = node_op_type + std::to_string(layer_count++);
-        }
+        }*/
         else if (node.GetOpName() == "clip") {
           node_op_type = "Clip";
           node_name = node_op_type + std::to_string(layer_count++);
@@ -328,7 +356,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           node_name = node_op_type + std::to_string(layer_count++);
         }
         else if (node.GetOpName() == "subtract") {
-          node_op_type = "Subtract";
+          node_op_type = "Sub";
           node_name = node_op_type + std::to_string(layer_count++);
         }
         else if (node.GetOpName() == "exp") {
@@ -342,6 +370,38 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         else if (node.GetOpName() == "minimum") {
           node_op_type = "Minimum";
           node_name = node_op_type + std::to_string(layer_count++);
+        }
+        else if (node.GetOpName() == "nn.matmul") {
+          node_op_type = "MatMul";
+          node_name = node_op_type + std::to_string(layer_count++);
+        }
+        else if (node.GetOpName() == "nn.leaky_relu") {
+          node_op_type = "LeakyRelu";
+          node_name = node_op_type + std::to_string(layer_count++);
+          auto alpha = node.GetAttr<std::vector<std::string>>("alpha");
+
+          metawarenn::Attribute attr_alpha("alpha", std::vector<float>({std::stof(alpha[0])}));
+          node_attributes.emplace_back(attr_alpha);
+        }
+        else if (node.GetOpName() == "nn.prelu") {
+          node_op_type = "PRelu";
+          node_name = node_op_type + std::to_string(layer_count++);
+        }
+        else if (node.GetOpName() == "nn.dropout") {
+          node_op_type = "Dropout";
+          node_name = node_op_type + std::to_string(layer_count++);
+        }
+        else if (node.GetOpName() == "nn.upsampling" || node.GetOpName() == "nn.upsampling3d") {
+          node_op_type = "Upsample";
+          node_name = node_op_type + std::to_string(layer_count++);
+          auto method = node.GetAttr<std::vector<std::string>>("method");
+          if(method[0] == "nearest_neighbor")
+            method[0] = "nearest";
+          else
+            method[0] = "linear"; //Gets handled in onnx based on dims
+
+          metawarenn::Attribute attr_method("mode", {method});
+          node_attributes.emplace_back(attr_method);
         }
         else if (node.GetOpName() == "sum") {
           node_op_type = "Sum";
@@ -403,14 +463,77 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         else if (node.GetOpName() == "nn.softmax") {
           node_op_type = "Softmax";
           node_name = node_op_type + std::to_string(layer_count++);
+          auto axis = node.GetAttr<std::vector<std::string>>("axis");
+          metawarenn::Attribute attr_axis("axis", std::vector<int>({std::stoi(axis[0])}));
+          node_attributes.emplace_back(attr_axis);
         }
         else if (node.GetOpName() == "reshape") {
           node_op_type = "Reshape";
           node_name = node_op_type + std::to_string(layer_count++);
+          std::string reshape_ip_name = node_name + "_ip";
+          auto new_shape = node.GetAttr<std::vector<std::string>>("newshape");
+          std::vector<float> tensor_vec;
+          for(auto i = new_shape.begin(); i != new_shape.end(); i++)
+            tensor_vec.push_back(std::stof(*i));
 
-          //std::vector<std::string> shape = node.GetAttr<std::vector<std::string>>("newshape");
-          //metawarenn::Attribute attr_shape("shape", std::vector<int>({std::stoi(shape[0]), std::stoi(shape[1])}));
-          //node_attributes.emplace_back(attr_shape);
+          metawarenn::Tensor reshape_tensor(reshape_ip_name, std::vector<int>({1}), get_mwnn_type_tvm(kDLInt), tensor_vec);
+          graph_->set_graph_initializers(reshape_tensor);
+          graph_->initializer_names.insert(reshape_ip_name);
+          auto const_node = reshape_tensor.get_constant_node();
+          graph_->graph_nodes[reshape_tensor.get_name()] = std::move(const_node);
+          node_inputs.emplace_back(reshape_ip_name);
+        }
+        else if (node.GetOpName() == "topk") {
+          node_op_type = "TopK";
+          node_name = node_op_type + std::to_string(layer_count++);
+          auto axis = node.GetAttr<std::vector<std::string>>("axis");
+          int is_ascend = std::stoi(node.GetAttr<std::vector<std::string>>("is_ascend")[0]);
+
+          metawarenn::Attribute attr_axis("axis", std::vector<int>({std::stoi(axis[0])}));
+          node_attributes.emplace_back(attr_axis);
+          metawarenn::Attribute attr_largest("largest", std::vector<int>({!is_ascend}));
+          node_attributes.emplace_back(attr_largest);
+          }
+        else if (node.GetOpName() == "image.resize1d" || node.GetOpName() == "image.resize2d" || node.GetOpName() == "image.resize3d") {
+          node_op_type = "Resize";
+          node_name = node_op_type + std::to_string(layer_count++);
+          auto cord_trans_mode = node.GetAttr<std::vector<std::string>>("coordinate_transformation_mode");
+          auto cubic_alpha = node.GetAttr<std::vector<std::string>>("cubic_alpha");
+          auto cubic_exclude = node.GetAttr<std::vector<std::string>>("cubic_exclude");
+          auto method = node.GetAttr<std::vector<std::string>>("method");
+          if(method[0] == "nearest_neighbor")
+            method[0] = "nearest";
+          auto rounding_method = node.GetAttr<std::vector<std::string>>("rounding_method");
+          if(rounding_method[0] == "round")
+            rounding_method[0] = "round_prefer_floor";
+
+          metawarenn::Attribute attr_cord_trans_mode("coordinate_transformation_mode", {cord_trans_mode});
+          node_attributes.emplace_back(attr_cord_trans_mode);
+          metawarenn::Attribute attr_cubic_alpha("cubic_coeff_a", std::vector<float>({std::stof(cubic_alpha[0])}));
+          node_attributes.emplace_back(attr_cubic_alpha);
+          metawarenn::Attribute attr_cubic_exclude("exclude_outside", std::vector<float>({std::stoi(cubic_exclude[0])}));
+          node_attributes.emplace_back(attr_cubic_exclude);
+          metawarenn::Attribute attr_method("mode", {method});
+          node_attributes.emplace_back(attr_method);
+          metawarenn::Attribute attr_rounding_method("nearest_mode", {rounding_method});
+          node_attributes.emplace_back(attr_rounding_method);
+          }
+        else if (node.GetOpName() == "image.crop_and_resize") {
+          node_op_type = "Resize";
+          node_name = node_op_type + std::to_string(layer_count++);
+          auto extrapolation_value = node.GetAttr<std::vector<std::string>>("extrapolation_value");
+          auto method = node.GetAttr<std::vector<std::string>>("method");
+          if(method[0] == "nearest_neighbor")
+            method[0] = "nearest";
+          else if(method[0] == "bilinear")
+            method[0] = "linear"; //Gets handled in onnx
+
+          metawarenn::Attribute attr_cord_trans_mode("coordinate_transformation_mode", {"tf_crop_and_resize"});
+          node_attributes.emplace_back(attr_cord_trans_mode);
+          metawarenn::Attribute attr_extrapolation_value("extrapolation_value", std::vector<float>({std::stof(extrapolation_value[0])}));
+          node_attributes.emplace_back(attr_extrapolation_value);
+          metawarenn::Attribute attr_method("mode", {method});
+          node_attributes.emplace_back(attr_method);
         }
         else {
           std::cout << "\n Unsupported Op in MetaWareNN backend : " << node.GetOpName();
