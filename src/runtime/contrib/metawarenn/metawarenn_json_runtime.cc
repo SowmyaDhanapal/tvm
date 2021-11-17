@@ -146,10 +146,16 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     std::vector<std::vector<int64_t>> op_shape;
     std::vector<DLDataType> dtypes;
     std::string op_name;
+    bool merge_bias_add = false;
+    std::set<int> merged_node_ids;
     for (int id = 0; id < nodes_.size(); id++) {
       const auto& node = nodes_[id];
       //std::cout << "\n Node Op Type : " << node.GetOpType() << " Name : " << node.GetOpName();
       if (node.GetOpType() == "kernel") {
+        if(merged_node_ids.count(id)) {
+          merge_bias_add = true;
+          continue;
+        }
         std::string node_name;
         std::string node_op_type;
         std::vector<std::string> node_inputs;
@@ -161,7 +167,13 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           auto in_node = node.GetInputs()[i];
           if(in_node.id_ > out_index)
             out_index = in_node.id_;
-          std::string ip_name = "node_" + std::to_string(in_node.id_);
+          std::string ip_name = "";
+          if(merge_bias_add) {
+            ip_name = "node_" + std::to_string(in_node.id_ - 2);
+            merge_bias_add = false;
+          }
+          else
+            ip_name = "node_" + std::to_string(in_node.id_);
           node_inputs.emplace_back(ip_name);
         }
         //Node Output Parsing
@@ -192,6 +204,18 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           node_attributes.emplace_back(attr_pad);
           metawarenn::Attribute attr_stride("strides", std::vector<int>({std::stoi(strides[0]), std::stoi(strides[1])}));
           node_attributes.emplace_back(attr_stride);
+          if(id+2 < nodes_.size()) {
+            for(int k = id+1; k <= id+2; k++) {
+              const auto& bias_node = nodes_[k];
+              if(bias_node.GetOpType() == "kernel" && bias_node.GetOpName() == "nn.bias_add") {
+                //BiasNode Input Parsing
+                auto bias_in_node = bias_node.GetInputs()[1];//index-0 --> Feature Tensor, index-1 Bias Values
+                std::string ip_name = "node_" + std::to_string(bias_in_node.id_);
+                node_inputs.emplace_back(ip_name);
+                merged_node_ids.insert(k);
+              }
+            }
+          }
         }
         else if (node.GetOpName() == "nn.conv2d_transpose") {
           node_op_type = "ConvTranspose";
@@ -251,7 +275,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           node_name = node_op_type + std::to_string(layer_count++);
         }
         else if (node.GetOpName() == "nn.max_pool2d") {
-          node_op_type = node.GetOpName() == "MaxPool";
+          node_op_type = "MaxPool";
           node_name = node_op_type + std::to_string(layer_count++);
           auto dilations = node.GetAttr<std::vector<std::string>>("dilation");
           auto pool_size = node.GetAttr<std::vector<std::string>>("pool_size");
@@ -271,7 +295,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           node_attributes.emplace_back(attr_stride);
         }
         else if (node.GetOpName() == "nn.avg_pool2d") {
-          node_op_type = node.GetOpName() == "AveragePool";
+          node_op_type = "AveragePool";
           node_name = node_op_type + std::to_string(layer_count++);
           auto pool_size = node.GetAttr<std::vector<std::string>>("pool_size");
           auto padding = node.GetAttr<std::vector<std::string>>("padding");
@@ -308,20 +332,27 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           node_attributes.emplace_back(attr_size);
         }
         else if (node.GetOpName() == "nn.batch_flatten") {
-          node_op_type = "BatchFlatten";
+          node_op_type = "Flatten";
           node_name = node_op_type + std::to_string(layer_count++);
         }
-        /*else if (node.GetOpName() == "nn.dense") {
-          node_op_type = "Dense";
+        else if (node.GetOpName() == "nn.dense") {
+          node_op_type = "Gemm";
           node_name = node_op_type + std::to_string(layer_count++);
-          auto units = node.GetAttr<std::vector<std::string>>("units");
-          metawarenn::Attribute attr_units("units", std::vector<int>({std::stoi(units[0])}));
-          node_attributes.emplace_back(attr_units);
+          metawarenn::Attribute attr_transB("transB", std::vector<int>({1}));//TODO - Do Check & Pass flags
+          node_attributes.emplace_back(attr_transB);
+          if(id+2 < nodes_.size()) {
+            for(int k = id+1; k <= id+2; k++) {
+              const auto& bias_node = nodes_[k];
+              if(bias_node.GetOpType() == "kernel" && bias_node.GetOpName() == "add") {
+                //BiasNode Input Parsing = (Gemm)(onnx) -> (Flatten + Dense + Add) in TVM
+                auto bias_in_node = bias_node.GetInputs()[1];//index-0 --> Feature Tensor, index-1 Bias Values
+                std::string ip_name = "node_" + std::to_string(bias_in_node.id_);
+                node_inputs.emplace_back(ip_name);
+                merged_node_ids.insert(k);
+              }
+            }
+          }
         }
-        else if (node.GetOpName() == "nn.bias_add") {
-          node_op_type = "BiasAdd";
-          node_name = node_op_type + std::to_string(layer_count++);
-        }*/
         else if (node.GetOpName() == "clip") {
           node_op_type = "Clip";
           node_name = node_op_type + std::to_string(layer_count++);
@@ -475,8 +506,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           std::vector<float> tensor_vec;
           for(auto i = new_shape.begin(); i != new_shape.end(); i++)
             tensor_vec.push_back(std::stof(*i));
-
-          metawarenn::Tensor reshape_tensor(reshape_ip_name, std::vector<int>({1}), get_mwnn_type_tvm(kDLInt), tensor_vec);
+          metawarenn::Tensor reshape_tensor(reshape_ip_name, std::vector<int>({tensor_vec.size()}), metawarenn::ElementType::element_type::int64_, tensor_vec);
           graph_->set_graph_initializers(reshape_tensor);
           graph_->initializer_names.insert(reshape_ip_name);
           auto const_node = reshape_tensor.get_constant_node();
@@ -611,6 +641,9 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         graph_->initializer_names.insert(name);
         auto const_node = m_tensor.get_constant_node();
         graph_->graph_nodes[m_tensor.get_name()] = std::move(const_node);
+        /*std::cout << "\n Const Node : " << name << " Dims : ";
+        for (auto di : dims)
+            std::cout << di << ",";*/
       }
     }
   }
@@ -661,12 +694,12 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         std::cout << "\n MetaWareNNCC : " << rr.get_name();
         manager.register_pass(rr);
       }
-      else*/
+      else
       if(g_n.get_op_type() == "BatchNormalization") {
         ::metawarenn::optimizer::FuseBatchNorm fbn(graph_, g_n);
         std::cout << "\n MetaWareNNCC : " << fbn.get_name();
         manager.register_pass(fbn);
-      }
+      }*/
       /*else  if(g_n.get_op_type() == "Relu") {
         ::metawarenn::optimizer::FuseRelu fr(graph_, g_n);
         std::cout << "\n MetaWareNNCC : " << fr.get_name();
