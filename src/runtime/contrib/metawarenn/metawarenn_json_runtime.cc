@@ -146,16 +146,15 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     std::vector<std::vector<int64_t>> op_shape;
     std::vector<DLDataType> dtypes;
     std::string op_name;
-    bool merge_bias_add = false;
     std::set<int> merged_node_ids;
+    std::set<int> merged_op_ids;
+    int prev_out_index = 0;
     for (int id = 0; id < nodes_.size(); id++) {
       const auto& node = nodes_[id];
       //std::cout << "\n Node Op Type : " << node.GetOpType() << " Name : " << node.GetOpName();
       if (node.GetOpType() == "kernel") {
-        if(merged_node_ids.count(id)) {
-          merge_bias_add = true;
+        if(merged_node_ids.count(id))
           continue;
-        }
         std::string node_name;
         std::string node_op_type;
         std::vector<std::string> node_inputs;
@@ -165,19 +164,20 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         //Node Inputs Parsing
         for (size_t i = 0; i < node.GetInputs().size(); ++i) {
           auto in_node = node.GetInputs()[i];
-          if(in_node.id_ > out_index)
-            out_index = in_node.id_;
+          if(in_node.id_ >= out_index)
+            out_index = in_node.id_ + 1;
           std::string ip_name = "";
-          if(merge_bias_add) {
+          if(merged_op_ids.count(in_node.id_))
             ip_name = "node_" + std::to_string(in_node.id_ - 2);
-            merge_bias_add = false;
-          }
           else
             ip_name = "node_" + std::to_string(in_node.id_);
           node_inputs.emplace_back(ip_name);
         }
+        if(prev_out_index > out_index)
+          out_index = prev_out_index + 1;
+        prev_out_index = out_index;
         //Node Output Parsing
-        op_name = "node_" + std::to_string(out_index+1);
+        op_name = "node_" + std::to_string(out_index);
         node_outputs.emplace_back(op_name);
 
         //Node Output Shape & Type Parsing
@@ -213,6 +213,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
                 std::string ip_name = "node_" + std::to_string(bias_in_node.id_);
                 node_inputs.emplace_back(ip_name);
                 merged_node_ids.insert(k);
+                merged_op_ids.insert(bias_in_node.id_ + 1);
               }
             }
           }
@@ -349,6 +350,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
                 std::string ip_name = "node_" + std::to_string(bias_in_node.id_);
                 node_inputs.emplace_back(ip_name);
                 merged_node_ids.insert(k);
+                merged_op_ids.insert(bias_in_node.id_ + 1);
               }
             }
           }
@@ -373,7 +375,13 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         else if (node.GetOpName() == "transpose") {
           node_op_type = "Transpose";
           node_name = node_op_type + std::to_string(layer_count++);
-          //TODO perm attribute
+          auto perm = node.GetAttr<std::vector<std::string>>("axes");
+          std::vector<int> int_perm(perm.size());
+          for(int itr = 0; itr < perm.size(); itr++) {
+            int_perm[itr] = std::stoi(perm[itr]);
+           }
+          metawarenn::Attribute attr_perm("perm", int_perm);
+          node_attributes.emplace_back(attr_perm);
         }
         else if (node.GetOpName() == "concatenate") {
           node_op_type = "Concat";
@@ -383,8 +391,20 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           node_attributes.emplace_back(attr_axis);
         }
         else if (node.GetOpName() == "max") {
-          node_op_type = "Max";
-          node_name = node_op_type + std::to_string(layer_count++);
+          if((id+4 < nodes_.size()) &&
+             (nodes_[id+1].GetOpType() == "kernel" && nodes_[id+1].GetOpName() == "subtract") &&
+             (nodes_[id+2].GetOpType() == "kernel" && nodes_[id+2].GetOpName() == "exp") &&
+             (nodes_[id+3].GetOpType() == "kernel" && nodes_[id+3].GetOpName() == "sum") &&
+             (nodes_[id+4].GetOpType() == "kernel" && nodes_[id+4].GetOpName() == "divide")) {
+               std::cout << "\n Implement softmax!!";
+               node_op_type = "Softmax";
+               node_name = node_op_type + std::to_string(layer_count++);
+               id = id + 4;
+             }
+           else {
+             node_op_type = "Max";
+             node_name = node_op_type + std::to_string(layer_count++);
+           }
         }
         else if (node.GetOpName() == "subtract") {
           node_op_type = "Sub";
@@ -439,7 +459,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           node_name = node_op_type + std::to_string(layer_count++);
         }
         else if (node.GetOpName() == "divide") {
-          node_op_type = "Divide";
+          node_op_type = "Div";
           node_name = node_op_type + std::to_string(layer_count++);
         }
         else if (node.GetOpName() == "multiply") {
