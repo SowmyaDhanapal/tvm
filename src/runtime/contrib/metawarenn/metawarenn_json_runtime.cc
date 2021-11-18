@@ -358,19 +358,35 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         else if (node.GetOpName() == "clip") {
           node_op_type = "Clip";
           node_name = node_op_type + std::to_string(layer_count++);
-          /*auto min = node.GetAttr<std::vector<std::string>>("a_min");
-          metawarenn::Attribute attr_min("min", std::vector<int>({std::stoi(min[0])}));
-          node_attributes.emplace_back(attr_min);
+          auto min = node.GetAttr<std::vector<std::string>>("a_min");
           auto max = node.GetAttr<std::vector<std::string>>("a_max");
-          metawarenn::Attribute attr_max("max", std::vector<int>({std::stoi(max[0])}));
-          node_attributes.emplace_back(attr_max);*/
+
+          std::string clip_ip_min = node_name + "_min";
+          metawarenn::Tensor min_tensor(clip_ip_min, std::vector<int>({1}), metawarenn::ElementType::element_type::float_, std::vector<float>({std::stof(min[0])}));
+          graph_->set_graph_initializers(min_tensor);
+          graph_->initializer_names.insert(clip_ip_min);
+          auto min_node = min_tensor.get_constant_node();
+          graph_->graph_nodes[min_tensor.get_name()] = std::move(min_node);
+          node_inputs.emplace_back(clip_ip_min);
+
+          std::string clip_ip_max = node_name + "_max";
+          metawarenn::Tensor max_tensor(clip_ip_max, std::vector<int>({1}), metawarenn::ElementType::element_type::float_, std::vector<float>({std::stof(max[0])}));
+          graph_->set_graph_initializers(max_tensor);
+          graph_->initializer_names.insert(clip_ip_max);
+          auto max_node = max_tensor.get_constant_node();
+          graph_->graph_nodes[max_tensor.get_name()] = std::move(max_node);
+          node_inputs.emplace_back(clip_ip_max);
         }
         else if (node.GetOpName() == "squeeze") {
           node_op_type = "Squeeze";
           node_name = node_op_type + std::to_string(layer_count++);
-          /*auto axis = node.GetAttr<std::vector<std::string>>("axis");
-          metawarenn::Attribute attr_axis("axis", std::vector<int>({std::stoi(axis[0])}));
-          node_attributes.emplace_back(attr_axis);*/
+          auto axes = node.GetAttr<std::vector<std::string>>("axis");
+          std::vector<int> int_axes(axes.size());
+          for(int itr = 0; itr < axes.size(); itr++) {
+            int_axes[itr] = std::stoi(axes[itr]);
+           }
+          metawarenn::Attribute attr_axes("axes", int_axes);
+          node_attributes.emplace_back(attr_axes);
         }
         else if (node.GetOpName() == "transpose") {
           node_op_type = "Transpose";
