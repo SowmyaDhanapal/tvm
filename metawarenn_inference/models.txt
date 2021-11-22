@@ -1,3 +1,4 @@
+mobilenetv2-7.onnx
 resnet50-v1-7.onnx
 resnet50-v2-7.onnx
 resnet50-caffe2-v1-7.onnx
@@ -25,4 +26,3 @@ caffenet-7.onnx
 rcnn-ilsvrc13-7.onnx
 zfnet512-7.onnx
 efficientnet-lite4-11.onnx
-mobilenetv2-7.onnx
