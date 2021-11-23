@@ -45,6 +45,7 @@ def _register_external_op_helper(op_name, supported=True):
 
     return _func_wrapper
 
+_register_external_op_helper("nn.pad")
 _register_external_op_helper("nn.conv2d")
 _register_external_op_helper("nn.bias_add")
 _register_external_op_helper("nn.batch_norm")
@@ -73,8 +74,6 @@ _register_external_op_helper("reshape")
 _register_external_op_helper("mean")
 _register_external_op_helper("split")
 _register_external_op_helper("strided_slice")
-# Pad layer will be required for nasnet & inception_resnet_v2 tflite models. The pad_width attribute type is not supported in relay build. So, it will throw error if uncommented.
-#_register_external_op_helper("nn.pad")
 
 def partition_for_metawarenn(mod, params=None):
     """Partition the graph greedily offloading supported operators to MetaWareNN.

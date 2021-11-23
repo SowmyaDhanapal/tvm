@@ -69,8 +69,44 @@ class MetaWareNNJSONSerializer : public backend::contrib::JSONSerializer {
     auto node = std::make_shared<JSONGraphNode>(name,     /* name_ */
                                                 "kernel", /* op_type_ */
                                                 inputs, 1 /* num_outputs_ */);
-    SetCallNodeAttribute(node, cn);
+    if (name == "nn.pad") {
+      SetPadNodeAttribute(node, cn);
+    }
+    else {
+      SetCallNodeAttribute(node, cn);
+    }
     return AddNode(node, GetRef<Expr>(cn));
+  }
+
+  void SetPadNodeAttribute(std::shared_ptr<JSONGraphNode> node, const CallNode* cn) {
+    const auto* pad_attr = cn->attrs.as<PadAttrs>();
+    ICHECK(pad_attr);
+    auto p = pad_attr->pad_width;
+    const int dim_h = p.size();
+    const int dim_w = p[0].size();
+    std::vector<std::string> padding;
+
+    std::vector<std::string> NDimValue{std::to_string(p[0][0].as<IntImmNode>()->value), std::to_string(p[0][1].as<IntImmNode>()->value)};
+    std::vector<std::string> HDimValue{std::to_string(p[1][0].as<IntImmNode>()->value), std::to_string(p[1][1].as<IntImmNode>()->value)};
+    std::vector<std::string> WDimValue{std::to_string(p[2][0].as<IntImmNode>()->value), std::to_string(p[2][1].as<IntImmNode>()->value)};
+    std::vector<std::string> CDimValue{std::to_string(p[3][0].as<IntImmNode>()->value), std::to_string(p[3][1].as<IntImmNode>()->value)};
+
+    //Pad layer NHWC --> NCHW
+    //TFLite Format (NStart, NEnd, HStart, HEnd, WStart, WEnd, CStart, CEnd) (0, 1, 2, 3, 4, 5, 6, 7)
+    //ONNX Format   (NStart, CStart, HStart, WStart, NEnd, CEnd, HEnd, WEnd) (0, 6, 2, 4, 1, 7, 3, 5)
+
+    padding.emplace_back(NDimValue[0]);
+    padding.emplace_back(CDimValue[0]);
+    padding.emplace_back(HDimValue[0]);
+    padding.emplace_back(WDimValue[0]);
+    padding.emplace_back(NDimValue[1]);
+    padding.emplace_back(CDimValue[1]);
+    padding.emplace_back(HDimValue[1]);
+    padding.emplace_back(WDimValue[1]);
+
+    std::vector<dmlc::any> padding_attr;
+    padding_attr.emplace_back(padding);
+    node->SetAttr("padding", padding_attr);
   }
 };
 
