@@ -40,6 +40,7 @@
 #include "metawarenn_lib/executable_network/metawarenn_executable_graph.h"
 #include "metawarenn_lib/mwnn_inference_api/mwnn_inference_api.h"
 #include "metawarenn_lib/mwnnconvert/mwnn_protobuf/cpp_wrapper/MWNN.pb.h"
+#include "metawarenn_lib/mwnnconvert/mwnn_to_onnx_proto.h"
 #define CHW_TO_HWC 0
 #define HWC_TO_CHW 0
 #define TF_TVM_TO_ONNX 1
@@ -76,8 +77,9 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     #if INVOKE_NNAC
       InvokeNNAC();
     #endif
+    write_onnx_proto(graph_);
     //Generate Executable Network
-    exe_graph_ = std::make_shared<metawarenn::ExecutableGraph>(*graph_);
+    //exe_graph_ = std::make_shared<metawarenn::ExecutableGraph>(*graph_);
   }
 
   void Run() override {
@@ -108,7 +110,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     }
     // **************************************** Calls to invoke the MetaWareNN Inference API ************************************
 
-    ::metawarenn::InferenceApi mwapi;
+    /*::metawarenn::InferenceApi mwapi;
 
     for (auto g_ip : graph_->get_graph_ip_tensor()) {
       auto ip_shape = g_ip.get_dims();
@@ -127,7 +129,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     for (auto g_op : graph_->get_graph_op_tensor()) {
       auto op_shape = g_op.get_dims();
       mwapi.getOutput(graph_outputs[g_op.get_name()], op_shape);
-    }
+    }*/
 
 
     // ******************************************* Call to invoke the local run function *****************************************
@@ -284,7 +286,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           auto strides = node.GetAttr<std::vector<std::string>>("strides");
           int ceil_mode = std::stoi(node.GetAttr<std::vector<std::string>>("ceil_mode")[0]);
 
-          metawarenn::Attribute attr_ceil_model("ceil_model", std::vector<int>({ceil_mode}));
+          metawarenn::Attribute attr_ceil_model("ceil_mode", std::vector<int>({ceil_mode}));
           node_attributes.emplace_back(attr_ceil_model);
           metawarenn::Attribute attr_dilations("dilations", std::vector<int>({std::stoi(dilations[0]), std::stoi(dilations[1])}));
           node_attributes.emplace_back(attr_dilations);
@@ -304,7 +306,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           int ceil_mode = std::stoi(node.GetAttr<std::vector<std::string>>("ceil_mode")[0]);
           int count_include_pad = std::stoi(node.GetAttr<std::vector<std::string>>("count_include_pad")[0]);
 
-          metawarenn::Attribute attr_ceil_model("ceil_model", std::vector<int>({ceil_mode}));
+          metawarenn::Attribute attr_ceil_model("ceil_mode", std::vector<int>({ceil_mode}));
           node_attributes.emplace_back(attr_ceil_model);
           metawarenn::Attribute attr_count_include_pad("count_include_pad", std::vector<int>({count_include_pad}));
           node_attributes.emplace_back(attr_count_include_pad);
@@ -512,10 +514,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         else if (node.GetOpName() == "split") {
           node_op_type = "Split";
           node_name = node_op_type + std::to_string(layer_count++);
-          auto indices_or_sections = node.GetAttr<std::vector<std::string>>("indices_or_sections");
           auto axis = node.GetAttr<std::vector<std::string>>("axis");
-          metawarenn::Attribute attr_ios("indices_or_sections", std::vector<int>({std::stoi(indices_or_sections[0])}));
-          node_attributes.emplace_back(attr_ios);
           metawarenn::Attribute attr_axis("axis", std::vector<int>({std::stoi(axis[0])}));
           node_attributes.emplace_back(attr_axis);
         }

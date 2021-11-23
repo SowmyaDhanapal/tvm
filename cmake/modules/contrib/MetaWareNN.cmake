@@ -28,6 +28,7 @@ if(USE_METAWARENN_CODEGEN STREQUAL "ON")
     src/runtime/contrib/metawarenn/metawarenn_lib/kernels/helpers/*.cc
     src/runtime/contrib/metawarenn/metawarenn_lib/executable_network/*.cc
     src/runtime/contrib/metawarenn/metawarenn_lib/mwnn_inference_api/*.cc
+    src/runtime/contrib/metawarenn/metawarenn_lib/mwnnconvert/*.cc
     src/runtime/contrib/metawarenn/metawarenn_lib/mwnnconvert/mwnn_protobuf/cpp_wrapper/*.cc
     src/runtime/contrib/metawarenn/metawarenn_lib/mwnnconvert/onnx_protobuf/*.cc)
 
