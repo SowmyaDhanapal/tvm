@@ -385,15 +385,21 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           node_op_type = "Squeeze";
           node_name = node_op_type + std::to_string(layer_count++);
           auto axes = node.GetAttr<std::vector<std::string>>("axis");
-          std::vector<int> int_axes(axes.size());
+          std::vector<float> tensor_axes(axes.size());
           for(int itr = 0; itr < axes.size(); itr++) {
             if(TF_TVM_TO_ONNX) //To handle the layout from HWC(TFLite) to CHW(ONNX)
-              int_axes[itr] = std::stoi(axes[itr]) + 1;
+              tensor_axes[itr] = std::stof(axes[itr]) + 1;
             else
-              int_axes[itr] = std::stoi(axes[itr]);
+              tensor_axes[itr] = std::stof(axes[itr]);
            }
-          metawarenn::Attribute attr_axes("axes", int_axes);
-          node_attributes.emplace_back(attr_axes);
+
+          std::string axes_ip_name = node_name + "axes";
+          metawarenn::Tensor axes_tensor(axes_ip_name, std::vector<int>({tensor_axes.size()}), metawarenn::ElementType::element_type::int64_, tensor_axes);
+          graph_->set_graph_initializers(axes_tensor);
+          graph_->initializer_names.insert(axes_ip_name);
+          auto const_node_axes = axes_tensor.get_constant_node();
+          graph_->graph_nodes[axes_tensor.get_name()] = std::move(const_node_axes);
+          node_inputs.emplace_back(axes_ip_name);;
         }
         else if (node.GetOpName() == "transpose") {
           node_op_type = "Transpose";
@@ -425,7 +431,13 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
              (nodes_[id+4].GetOpType() == "kernel" && nodes_[id+4].GetOpName() == "divide")) {
                node_op_type = "Softmax";
                node_name = node_op_type + std::to_string(layer_count++);
+               metawarenn::Attribute attr_axis("axis", std::vector<int>({1}));//Defaults to 1(C) because, 0th axis mostly describes the batch_size(N)
+               node_attributes.emplace_back(attr_axis);
                id = id + 4;
+               const auto& node = nodes_[id];
+               //Node Output Shape & Type Parsing
+               op_shape = node.GetOpShape();
+               dtypes = node.GetOpDataType();
              }
            else {
              node_op_type = "Max";
@@ -438,14 +450,6 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         }
         else if (node.GetOpName() == "exp") {
           node_op_type = "Exp";
-          node_name = node_op_type + std::to_string(layer_count++);
-        }
-        else if (node.GetOpName() == "maximum") {
-          node_op_type = "Maximum";
-          node_name = node_op_type + std::to_string(layer_count++);
-        }
-        else if (node.GetOpName() == "minimum") {
-          node_op_type = "Minimum";
           node_name = node_op_type + std::to_string(layer_count++);
         }
         else if (node.GetOpName() == "nn.matmul") {
@@ -675,7 +679,6 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
       for(int n = 0; n < op_shape[m].size(); n++) {
         dims.push_back(op_shape[m][n]);
       }
-
     //Add Outputs
     auto m_type = get_mwnn_type_tvm(dtypes[0].code);
     //Fills Graph Output Tensor Details - Name, Dims
