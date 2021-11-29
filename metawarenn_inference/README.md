@@ -71,7 +71,7 @@
 #### To Invoke the NNAC & EVGENCNN Script to generate the EV Binary file
   ```
    1. Update the "tvm/src/runtime/contrib/metawarenn/metawarenn_json_runtime.cc" file as follows:
-      i. Set the INVOKE_NNAC macro to 1 in line no: 44
+      i. Set the INVOKE_NNAC macro to 1 in line no: 47
    2. Set path to ARC/ directory in tvm/metawarenn_inference/env.sh line no: 11
    3. Set path to EV_CNNMODELS_HOME/ directory in tvm/metawarenn_inference/env.sh line no: 12
    [Note] : Generated EV Binary file for MetaWareNN SubGraph will be stored in evgencnn/scripts folder and all intermediate files will get stored in `/path/to/tvm/NNAC_DUMPS` folder
@@ -116,9 +116,11 @@
    2. source env.sh
    3. sh download_onnx_models.sh # (For First time) - Creates onnx_models directory inside tvm/ & downloads models into it
    4. python test_regression_onnx.py # Creates a `op_onnx_models` directory and dump the generated ONNXProto files for all input models & `validation_result.txt` file which contains the comparison of original & generated onnx model
+[Note] - Ensure the `TF_TVM_TO_ONNX` macro is set to 0 in line no:46 of "tvm/src/runtime/contrib/metawarenn/metawarenn_json_runtime.cc"
 
 ### To Generate the ONNXProto from multiple TFLite models & Verify
    1. cd /path/to/tvm/metawarenn_inference
    2. source env.sh
    3. sh download_tflite_models.sh # (For First time) - Creates tflite_models directory inside tvm/ & downloads models into it
    4. python test_regression_tflite.py # Creates a `op_tflite_models` directory and dump the generated ONNXProto files for all input models & `validation_result.txt` file which contains the comparison of original tflite & generated onnx model
+[Note] - Ensure the `TF_TVM_TO_ONNX` macro is set to 1 in line no:46 of "tvm/src/runtime/contrib/metawarenn/metawarenn_json_runtime.cc"

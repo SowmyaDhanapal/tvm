@@ -500,7 +500,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           auto axis = node.GetAttr<std::vector<std::string>>("axis");
           bool keepdims = std::stoi(node.GetAttr<std::vector<std::string>>("keepdims")[0]);
           bool exclude = std::stoi(node.GetAttr<std::vector<std::string>>("exclude")[0]);
-          //Ensure the HWC layout for the reduction & keepdims as false from TFLite model
+          //Ensure the HWC layout for the reduction from TFLite model
           if(TF_TVM_TO_ONNX && std::stoi(axis[0]) == 1 && std::stoi(axis[1]) == 2) {
             node_op_type = "GlobalAveragePool";
             node_name = node_op_type + std::to_string(layer_count++);
@@ -776,7 +776,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
                   std::cout << "\t Dims : ";
                   for (auto dim : g_t.get_dims())
                     std::cout << dim << ",";
-                  ::metawarenn::optimizer::ExpandDimension ed(graph_, g_t, TF_TVM_TO_ONNX);
+                  ::metawarenn::optimizer::ExpandDimension ed(graph_, g_t);
                   manager.register_pass(ed);
                 }
               }
