@@ -171,15 +171,27 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           if(in_node.id_ >= out_index)
             out_index = in_node.id_ + 1;
           std::string ip_name = "";
-          ip_name = "node_" + std::to_string(in_node.id_);
+          // Check if the input is an initializer
+          if (std::count(input_nodes_.begin(), input_nodes_.end(), in_node.id_))
+            ip_name = "node_" + std::to_string(in_node.id_);
+          // Check if the input is computational node output & append the index with ip_name
+          else
+            ip_name = "node_" + std::to_string(in_node.id_) + "_" + std::to_string(in_node.index_);
           node_inputs.emplace_back(ip_name);
         }
         if(prev_out_index > out_index)
           out_index = prev_out_index + 1;
         prev_out_index = out_index;
-        //Node Output Parsing
-        op_name = "node_" + std::to_string(out_index);
-        node_outputs.emplace_back(op_name);
+        // Node Output Parsing
+        for (int i = 0; i < node.GetNumOutput(); ++i) {
+          // Avoid adding training related outputs in batchnorm node
+          if(node.GetOpName() == "nn.batch_norm" && i == 1)
+            break;
+          else {
+            op_name = "node_" + std::to_string(out_index) + "_" + std::to_string(i);
+            node_outputs.emplace_back(op_name);
+          }
+        }
         //Node Output Shape & Type Parsing
         op_shape = node.GetOpShape();
         dtypes = node.GetOpDataType();
@@ -213,7 +225,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
                 std::string ip_name = "node_" + std::to_string(bias_in_node.id_);
                 node_inputs.emplace_back(ip_name);
                 merged_node_ids.insert(k);
-                op_name = "node_" + std::to_string(bias_in_node.id_+1);
+                op_name = "node_" + std::to_string(bias_in_node.id_+1) + "_" + std::to_string(bias_in_node.index_);
                 node_outputs[0] = op_name;
                 prev_out_index = bias_in_node.id_+1;
               }
@@ -352,7 +364,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
                 std::string ip_name = "node_" + std::to_string(bias_in_node.id_);
                 node_inputs.emplace_back(ip_name);
                 merged_node_ids.insert(k);
-                op_name = "node_" + std::to_string(bias_in_node.id_+1);
+                op_name = "node_" + std::to_string(bias_in_node.id_+1) + "_" + std::to_string(bias_in_node.index_);
                 node_outputs[0] = op_name;
                 prev_out_index = bias_in_node.id_+1;
               }
@@ -498,29 +510,44 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         }
         else if (node.GetOpName() == "mean") {
           auto axis = node.GetAttr<std::vector<std::string>>("axis");
-          bool keepdims = std::stoi(node.GetAttr<std::vector<std::string>>("keepdims")[0]);
-          bool exclude = std::stoi(node.GetAttr<std::vector<std::string>>("exclude")[0]);
+          int keepdims = std::stoi(node.GetAttr<std::vector<std::string>>("keepdims")[0]);
+          int exclude = std::stoi(node.GetAttr<std::vector<std::string>>("exclude")[0]);
           //Ensure the HWC layout for the reduction from TFLite model
           if(TF_TVM_TO_ONNX && std::stoi(axis[0]) == 1 && std::stoi(axis[1]) == 2) {
             node_op_type = "GlobalAveragePool";
             node_name = node_op_type + std::to_string(layer_count++);
           }
           else {
-            node_op_type = "Mean";
+            node_op_type = "ReduceMean"; // keepdims = 0 reduces the shape according to axes & keepdims = 1 maintains same shape
             node_name = node_op_type + std::to_string(layer_count++);
             std::vector<int> int_axis(axis.size());
-            std::transform(axis.begin(), axis.end(), std::back_inserter(int_axis),
-                          [](const std::string& str) { return std::stoi(str); });
-            metawarenn::Attribute attr_axis("axis", int_axis);
+            for(int i = 0; i < axis.size(); i++)
+              int_axis[i] = std::stoi(axis[i]);
+            metawarenn::Attribute attr_axis("axes", int_axis);
             node_attributes.emplace_back(attr_axis);
+            metawarenn::Attribute attr_keepdims("keepdims", keepdims);
+            node_attributes.emplace_back(attr_keepdims);
           }
         }
         else if (node.GetOpName() == "split") {
           node_op_type = "Split";
           node_name = node_op_type + std::to_string(layer_count++);
           auto axis = node.GetAttr<std::vector<std::string>>("axis");
-          metawarenn::Attribute attr_axis("axis", std::stoi(axis[0]));
-          node_attributes.emplace_back(attr_axis);
+          auto indices_or_sections = node.GetAttr<std::vector<std::string>>("indices_or_sections");
+          auto split_val = std::stof(indices_or_sections[0]);
+          metawarenn::Attribute attr_axis;
+          if(TF_TVM_TO_ONNX)
+            attr_axis = metawarenn::Attribute("axis", std::stoi(axis[0])-2); //To handle the layout from HWC(TFLite) to CHW(ONNX)
+          else {
+            attr_axis = metawarenn::Attribute("axis", std::stoi(axis[0]));
+            metawarenn::Tensor split_tensor(node_name + "_split", std::vector<int>{2}, metawarenn::ElementType::element_type::int64_, std::vector<float>{split_val, split_val});
+            graph_->set_graph_initializers(split_tensor);
+            graph_->initializer_names.insert(split_tensor.get_name());
+            auto const_node_split = split_tensor.get_constant_node();
+            graph_->graph_nodes[split_tensor.get_name()] = std::move(const_node_split);
+            node_inputs.emplace_back(split_tensor.get_name());
+            node_attributes.emplace_back(attr_axis);
+          }
         }
         else if (node.GetOpName() == "strided_slice") {
           node_op_type = "Slice";

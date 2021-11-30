@@ -26,3 +26,4 @@ caffenet-7.onnx
 rcnn-ilsvrc13-7.onnx
 zfnet512-7.onnx
 efficientnet-lite4-11.onnx
+shufflenet-v2-10.onnx
