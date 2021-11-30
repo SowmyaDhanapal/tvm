@@ -85,12 +85,26 @@ class MetaWareNNJSONSerializer : public backend::contrib::JSONSerializer {
     const int dim_h = p.size();
     const int dim_w = p[0].size();
     std::vector<std::string> padding;
+    std::vector<std::string> NDimValue(2);
+    std::vector<std::string> CDimValue(2);
+    std::vector<std::string> HDimValue(2);
+    std::vector<std::string> WDimValue(2);
 
-    std::vector<std::string> NDimValue{std::to_string(p[0][0].as<IntImmNode>()->value), std::to_string(p[0][1].as<IntImmNode>()->value)};
-    std::vector<std::string> HDimValue{std::to_string(p[1][0].as<IntImmNode>()->value), std::to_string(p[1][1].as<IntImmNode>()->value)};
-    std::vector<std::string> WDimValue{std::to_string(p[2][0].as<IntImmNode>()->value), std::to_string(p[2][1].as<IntImmNode>()->value)};
-    std::vector<std::string> CDimValue{std::to_string(p[3][0].as<IntImmNode>()->value), std::to_string(p[3][1].as<IntImmNode>()->value)};
+    auto tf_flag = std::getenv("TF_TVM_TO_ONNX");
+    bool tf_tvm_to_onnx = atoi(tf_flag);
 
+    if(tf_tvm_to_onnx) {
+    NDimValue = {std::to_string(p[0][0].as<IntImmNode>()->value), std::to_string(p[0][1].as<IntImmNode>()->value)};
+    HDimValue = {std::to_string(p[1][0].as<IntImmNode>()->value), std::to_string(p[1][1].as<IntImmNode>()->value)};
+    WDimValue = {std::to_string(p[2][0].as<IntImmNode>()->value), std::to_string(p[2][1].as<IntImmNode>()->value)};
+    CDimValue = {std::to_string(p[3][0].as<IntImmNode>()->value), std::to_string(p[3][1].as<IntImmNode>()->value)};
+    }
+    else {
+    NDimValue = {std::to_string(p[0][0].as<IntImmNode>()->value), std::to_string(p[0][1].as<IntImmNode>()->value)};
+    CDimValue = {std::to_string(p[1][0].as<IntImmNode>()->value), std::to_string(p[1][1].as<IntImmNode>()->value)};
+    HDimValue = {std::to_string(p[2][0].as<IntImmNode>()->value), std::to_string(p[2][1].as<IntImmNode>()->value)};
+    WDimValue = {std::to_string(p[3][0].as<IntImmNode>()->value), std::to_string(p[3][1].as<IntImmNode>()->value)};
+    }
     //Pad layer NHWC --> NCHW
     //TFLite Format (NStart, NEnd, HStart, HEnd, WStart, WEnd, CStart, CEnd) (0, 1, 2, 3, 4, 5, 6, 7)
     //ONNX Format   (NStart, CStart, HStart, WStart, NEnd, CEnd, HEnd, WEnd) (0, 6, 2, 4, 1, 7, 3, 5)

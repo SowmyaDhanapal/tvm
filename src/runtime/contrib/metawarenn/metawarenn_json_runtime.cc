@@ -43,7 +43,6 @@
 #include "metawarenn_lib/mwnnconvert/mwnn_to_onnx_proto.h"
 #define CHW_TO_HWC 0
 #define HWC_TO_CHW 0
-#define TF_TVM_TO_ONNX 0
 #define INVOKE_NNAC 0
 
 namespace tvm {
@@ -146,6 +145,8 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     std::string subgraph_name = "MetaWareNN_" + std::to_string(graph_count);
     graph_ = std::make_shared<::metawarenn::Graph>();
     graph_->set_name(subgraph_name);
+    auto tf_flag = std::getenv("TF_TVM_TO_ONNX");
+    bool tf_tvm_to_onnx = atoi(tf_flag);
     int layer_count = 0;
     std::vector<std::vector<int64_t>> op_shape;
     std::vector<DLDataType> dtypes;
@@ -399,7 +400,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           auto axes = node.GetAttr<std::vector<std::string>>("axis");
           std::vector<float> tensor_axes(axes.size());
           for(int itr = 0; itr < axes.size(); itr++) {
-            if(TF_TVM_TO_ONNX) //To handle the layout from HWC(TFLite) to CHW(ONNX)
+            if(tf_tvm_to_onnx) //To handle the layout from HWC(TFLite) to CHW(ONNX)
               tensor_axes[itr] = std::stof(axes[itr]) + 1;
             else
               tensor_axes[itr] = std::stof(axes[itr]);
@@ -429,7 +430,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           node_name = node_op_type + std::to_string(layer_count++);
           auto axis = node.GetAttr<std::vector<std::string>>("axis");
           metawarenn::Attribute attr_axis;
-          if(TF_TVM_TO_ONNX) //To handle the layout from HWC(TFLite) to CHW(ONNX)
+          if(tf_tvm_to_onnx) //To handle the layout from HWC(TFLite) to CHW(ONNX)
             attr_axis = metawarenn::Attribute("axis", std::stoi(axis[0])-2);
           else
             attr_axis = metawarenn::Attribute("axis", std::stoi(axis[0]));
@@ -513,7 +514,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           int keepdims = std::stoi(node.GetAttr<std::vector<std::string>>("keepdims")[0]);
           int exclude = std::stoi(node.GetAttr<std::vector<std::string>>("exclude")[0]);
           //Ensure the HWC layout for the reduction from TFLite model
-          if(TF_TVM_TO_ONNX && std::stoi(axis[0]) == 1 && std::stoi(axis[1]) == 2) {
+          if(tf_tvm_to_onnx && std::stoi(axis[0]) == 1 && std::stoi(axis[1]) == 2) {
             node_op_type = "GlobalAveragePool";
             node_name = node_op_type + std::to_string(layer_count++);
           }
@@ -536,7 +537,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           auto indices_or_sections = node.GetAttr<std::vector<std::string>>("indices_or_sections");
           auto split_val = std::stof(indices_or_sections[0]);
           metawarenn::Attribute attr_axis;
-          if(TF_TVM_TO_ONNX)
+          if(tf_tvm_to_onnx)
             attr_axis = metawarenn::Attribute("axis", std::stoi(axis[0])-2); //To handle the layout from HWC(TFLite) to CHW(ONNX)
           else {
             attr_axis = metawarenn::Attribute("axis", std::stoi(axis[0]));
@@ -556,7 +557,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           auto end = node.GetAttr<std::vector<std::string>>("end");
           std::vector<float> tensor_begin(begin.size());
           std::vector<float> tensor_end(begin.size());
-          if(TF_TVM_TO_ONNX) {
+          if(tf_tvm_to_onnx) {
             tensor_begin[0] = std::stof(begin[0]); tensor_begin[1] = std::stof(begin[3]);
             tensor_begin[2] = std::stof(begin[1]); tensor_begin[3] = std::stof(begin[2]);
             tensor_end[0] = std::stof(end[0]); tensor_end[1] = std::stof(end[3]);
@@ -598,7 +599,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           std::string reshape_ip_name = node_name + "_ip";
           auto new_shape = node.GetAttr<std::vector<std::string>>("newshape");
           std::vector<float> tensor_vec(new_shape.size(), 0);
-          if(TF_TVM_TO_ONNX & new_shape.size()==4) { //NHWC -> NCHW
+          if(tf_tvm_to_onnx & new_shape.size()==4) { //NHWC -> NCHW
             tensor_vec[0] = std::stof(new_shape[0]);//N
             tensor_vec[1] = std::stof(new_shape[3]);//C
             tensor_vec[2] = std::stof(new_shape[1]);//H
@@ -783,7 +784,9 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
   void ApplyPasses() {
     ::metawarenn::optimizer::PassManager manager;
     auto node_list = graph_->get_graph_nodes();
-    if(CHW_TO_HWC || HWC_TO_CHW || TF_TVM_TO_ONNX)
+    auto tf_flag = std::getenv("TF_TVM_TO_ONNX");
+    bool tf_tvm_to_onnx = atoi(tf_flag);
+    if(CHW_TO_HWC || HWC_TO_CHW || tf_tvm_to_onnx)
     {
       for (auto g_t : graph_->get_graph_initializers()) {
         if(g_t.get_dims().size() == 4) {
@@ -791,10 +794,10 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           std::cout << "\t Dims : ";
           for (auto dim : g_t.get_dims())
             std::cout << dim << ",";
-          ::metawarenn::optimizer::ConvertLayout cl(graph_, g_t, CHW_TO_HWC, HWC_TO_CHW, TF_TVM_TO_ONNX, true);
+          ::metawarenn::optimizer::ConvertLayout cl(graph_, g_t, CHW_TO_HWC, HWC_TO_CHW, tf_tvm_to_onnx, true);
           manager.register_pass(cl);
         }
-        else if(TF_TVM_TO_ONNX){
+        else if(tf_tvm_to_onnx){
           for (auto g_n : graph_->get_graph_nodes()) {
             if(g_n.get_op_type() == "Mul" || g_n.get_op_type() == "Add") {
               for (auto n_ip : g_n.get_inputs()) {
@@ -817,7 +820,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           std::cout << "\t Dims : ";
           for (auto dim : g_t.get_dims())
             std::cout << dim << ",";
-          ::metawarenn::optimizer::ConvertLayout cl(graph_, g_t, CHW_TO_HWC, HWC_TO_CHW, TF_TVM_TO_ONNX, false);
+          ::metawarenn::optimizer::ConvertLayout cl(graph_, g_t, CHW_TO_HWC, HWC_TO_CHW, tf_tvm_to_onnx, false);
           manager.register_pass(cl);
         }
       }

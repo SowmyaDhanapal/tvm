@@ -4,6 +4,7 @@
 #set the path to tvm
 export FRAMEWORK_PATH=/Path/to/tvm/
 export PYTHONPATH=$FRAMEWORK_PATH/python:${PYTHONPATH}
+export TF_TVM_TO_ONNX=0
 export METAWARENN_LIB_PATH=$FRAMEWORK_PATH"/src/runtime/contrib/metawarenn/metawarenn_lib/"
 export EXEC_DUMPS_PATH=$FRAMEWORK_PATH"/EXEC_DUMPS/"
 

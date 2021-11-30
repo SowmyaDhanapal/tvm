@@ -36,7 +36,8 @@ for line in f:
   else:
     print("Please check the model path")
     exit(1)
-
+  if(model_name == "mnist-7.onnx"):
+    input_data = np.random.random_sample((1,1,28,28)).astype(np.float32)
   input_all = [node.name for node in onnx_model.graph.input]
   input_initializer =  [node.name for node in onnx_model.graph.initializer]
   net_feed_input = list(set(input_all)  - set(input_initializer))
@@ -95,7 +96,7 @@ for line in f:
   gen_model_name = op_dump_folder + "/model_" + model_name
   os.rename("model.onnx", gen_model_name)
 
-  if(model_name == "efficientnet-lite4-11.onnx"):
+  if(model_name == "efficientnet-lite4-11.onnx" or model_name == "mnist-7.onnx"):
     new_data = input_data
   else:
     new_data = np.rollaxis(input_data, 3, 1)
