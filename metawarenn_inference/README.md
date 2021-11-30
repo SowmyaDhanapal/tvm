@@ -116,11 +116,10 @@
    2. source env.sh
    3. sh download_onnx_models.sh # (For First time) - Creates onnx_models directory inside tvm/ & downloads models into it
    4. python test_regression_onnx.py # Creates a `op_onnx_models` directory and dump the generated ONNXProto files for all input models & `validation_result.txt` file which contains the comparison of original & generated onnx model
-[Note] - Ensure the `TF_TVM_TO_ONNX` macro is set to 0 in line no:46 of "tvm/src/runtime/contrib/metawarenn/metawarenn_json_runtime.cc"
 
 ### To Generate the ONNXProto from multiple TFLite models & Verify
    1. cd /path/to/tvm/metawarenn_inference
-   2. source env.sh
-   3. sh download_tflite_models.sh # (For First time) - Creates tflite_models directory inside tvm/ & downloads models into it
-   4. python test_regression_tflite.py # Creates a `op_tflite_models` directory and dump the generated ONNXProto files for all input models & `validation_result.txt` file which contains the comparison of original tflite & generated onnx model
-[Note] - Ensure the `TF_TVM_TO_ONNX` macro is set to 1 in line no:46 of "tvm/src/runtime/contrib/metawarenn/metawarenn_json_runtime.cc"
+   2. Set `TF_TVM_TO_ONNX` macro to 1 in `/path/to/tvm/metawarenn_inference/env.sh` line no: 7
+   3. source env.sh
+   4. sh download_tflite_models.sh # (For First time) - Creates tflite_models directory inside tvm/ & downloads models into it
+   5. python test_regression_tflite.py # Creates a `op_tflite_models` directory and dump the generated ONNXProto files for all input models & `validation_result.txt` file which contains the comparison of original tflite & generated onnx model
