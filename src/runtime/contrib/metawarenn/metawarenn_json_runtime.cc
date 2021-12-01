@@ -76,9 +76,13 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     #if INVOKE_NNAC
       InvokeNNAC();
     #endif
+    #if !EXECUTABLE_GRAPH_SERIALIZATION
     write_onnx_proto(graph_);
+    #endif
     //Generate Executable Network
-    //exe_graph_ = std::make_shared<metawarenn::ExecutableGraph>(*graph_);
+    #if EXECUTABLE_GRAPH_SERIALIZATION
+    exe_graph_ = std::make_shared<metawarenn::ExecutableGraph>(*graph_);
+    #endif
   }
 
   void Run() override {
@@ -109,7 +113,8 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     }
     // **************************************** Calls to invoke the MetaWareNN Inference API ************************************
 
-    /*::metawarenn::InferenceApi mwapi;
+    #if EXECUTABLE_GRAPH_SERIALIZATION
+    ::metawarenn::InferenceApi mwapi;
 
     for (auto g_ip : graph_->get_graph_ip_tensor()) {
       auto ip_shape = g_ip.get_dims();
@@ -128,7 +133,8 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     for (auto g_op : graph_->get_graph_op_tensor()) {
       auto op_shape = g_op.get_dims();
       mwapi.getOutput(graph_outputs[g_op.get_name()], op_shape);
-    }*/
+    }
+    #endif
 
 
     // ******************************************* Call to invoke the local run function *****************************************
@@ -138,7 +144,9 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
 
  private:
   std::shared_ptr<::metawarenn::Graph> graph_;
+  #if EXECUTABLE_GRAPH_SERIALIZATION
   std::shared_ptr<::metawarenn::ExecutableGraph> exe_graph_;
+  #endif
   // Build up the engine based on the input graph.
   void BuildMetaWareNNGraph() {
     graph_count++;
@@ -382,16 +390,12 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           metawarenn::Tensor min_tensor(clip_ip_min, std::vector<int>({1}), metawarenn::ElementType::element_type::float_, std::vector<float>({std::stof(min[0])}));
           graph_->set_graph_initializers(min_tensor);
           graph_->initializer_names.insert(clip_ip_min);
-          auto min_node = min_tensor.get_constant_node();
-          graph_->graph_nodes[min_tensor.get_name()] = std::move(min_node);
           node_inputs.emplace_back(clip_ip_min);
 
           std::string clip_ip_max = node_name + "_max";
           metawarenn::Tensor max_tensor(clip_ip_max, std::vector<int>({1}), metawarenn::ElementType::element_type::float_, std::vector<float>({std::stof(max[0])}));
           graph_->set_graph_initializers(max_tensor);
           graph_->initializer_names.insert(clip_ip_max);
-          auto max_node = max_tensor.get_constant_node();
-          graph_->graph_nodes[max_tensor.get_name()] = std::move(max_node);
           node_inputs.emplace_back(clip_ip_max);
         }
         else if (node.GetOpName() == "squeeze") {
@@ -410,8 +414,6 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           metawarenn::Tensor axes_tensor(axes_ip_name, std::vector<int>({tensor_axes.size()}), metawarenn::ElementType::element_type::int64_, tensor_axes);
           graph_->set_graph_initializers(axes_tensor);
           graph_->initializer_names.insert(axes_ip_name);
-          auto const_node_axes = axes_tensor.get_constant_node();
-          graph_->graph_nodes[axes_tensor.get_name()] = std::move(const_node_axes);
           node_inputs.emplace_back(axes_ip_name);;
         }
         else if (node.GetOpName() == "transpose") {
@@ -544,8 +546,6 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
             metawarenn::Tensor split_tensor(node_name + "_split", std::vector<int>{2}, metawarenn::ElementType::element_type::int64_, std::vector<float>{split_val, split_val});
             graph_->set_graph_initializers(split_tensor);
             graph_->initializer_names.insert(split_tensor.get_name());
-            auto const_node_split = split_tensor.get_constant_node();
-            graph_->graph_nodes[split_tensor.get_name()] = std::move(const_node_split);
             node_inputs.emplace_back(split_tensor.get_name());
             node_attributes.emplace_back(attr_axis);
           }
@@ -574,16 +574,12 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           metawarenn::Tensor begin_tensor(begin_ip_name, std::vector<int>({tensor_begin.size()}), metawarenn::ElementType::element_type::int64_, tensor_begin);
           graph_->set_graph_initializers(begin_tensor);
           graph_->initializer_names.insert(begin_ip_name);
-          auto const_node_begin = begin_tensor.get_constant_node();
-          graph_->graph_nodes[begin_tensor.get_name()] = std::move(const_node_begin);
           node_inputs.emplace_back(begin_ip_name);
 
           std::string end_ip_name = node_name + "_ip_end";
           metawarenn::Tensor end_tensor(end_ip_name, std::vector<int>({tensor_end.size()}), metawarenn::ElementType::element_type::int64_, tensor_end);
           graph_->set_graph_initializers(end_tensor);
           graph_->initializer_names.insert(end_ip_name);
-          auto const_node_end = end_tensor.get_constant_node();
-          graph_->graph_nodes[end_tensor.get_name()] = std::move(const_node_end);
           node_inputs.emplace_back(end_ip_name);
         }
         else if (node.GetOpName() == "nn.softmax") {
@@ -612,8 +608,6 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           metawarenn::Tensor reshape_tensor(reshape_ip_name, std::vector<int>({tensor_vec.size()}), metawarenn::ElementType::element_type::int64_, tensor_vec);
           graph_->set_graph_initializers(reshape_tensor);
           graph_->initializer_names.insert(reshape_ip_name);
-          auto const_node = reshape_tensor.get_constant_node();
-          graph_->graph_nodes[reshape_tensor.get_name()] = std::move(const_node);
           node_inputs.emplace_back(reshape_ip_name);
         }
         else if (node.GetOpName() == "topk") {
@@ -680,8 +674,6 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           metawarenn::Tensor reshape_tensor(pad_ip_name, dims, metawarenn::ElementType::element_type::int64_, tensor_vec);
           graph_->set_graph_initializers(reshape_tensor);
           graph_->initializer_names.insert(pad_ip_name);
-          auto const_node = reshape_tensor.get_constant_node();
-          graph_->graph_nodes[reshape_tensor.get_name()] = std::move(const_node);
           node_inputs[1] = pad_ip_name;
         }
         else {
@@ -698,8 +690,6 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
 
         metawarenn::Node m_node(node_name, node_op_type, node_attributes, node_inputs, node_outputs);
         graph_->set_graph_nodes(m_node);
-        auto node = m_node.get_node();
-        graph_->graph_nodes[m_node.get_name()] = std::move(node);
       }
     }
     std::vector<int> dims;
@@ -740,8 +730,6 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           //Fills Graph Input Tensor Details - Name, Dims
           metawarenn::Tensor m_ip_tensor(ip_name, m_type, dims);
           graph_->set_graph_ip_names(ip_name);
-          auto ip_node = m_ip_tensor.get_node();
-          graph_->graph_nodes[ip_name] = std::move(ip_node);
           graph_->set_graph_ip_tensor(m_ip_tensor);
         }
       }
@@ -759,8 +747,6 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         metawarenn::Tensor m_tensor(name, dims, m_type, tensor_vec);
         graph_->set_graph_initializers(m_tensor);
         graph_->initializer_names.insert(name);
-        auto const_node = m_tensor.get_constant_node();
-        graph_->graph_nodes[m_tensor.get_name()] = std::move(const_node);
         std::cout << "\n Const Node : " << name << " Dims : ";
         for (auto di : dims)
             std::cout << di << ",";
