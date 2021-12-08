@@ -162,6 +162,56 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     std::set<int> merged_node_ids;
     int prev_out_index = 0;
     std::cout << "\n nodes_.size() : " << nodes_.size();
+    std::set<int> nid_set;
+    // Add inputs and constants.
+    for (size_t i = 0; i < input_nodes_.size(); ++i) {
+      auto nid = input_nodes_[i];
+      const auto& node = nodes_[nid];
+      nid_set.insert(nid);
+      std::string ip_name = "node_" + std::to_string(nid);
+      if (node.GetOpType() == "input") {
+        auto shapes = node.GetOpShape();
+        auto dtypes = node.GetOpDataType();
+
+        for (size_t j = 0; j < shapes.size(); ++j) {
+          auto shape = shapes[j];
+          int size = shape.size();
+          std::vector<int> dims(size);
+          for(int d = 0; d < size; d++)
+            dims[d] = shape[d];
+          std::cout << "\nInput Name : " << ip_name;
+          std::cout << "\nInput Dims : ";
+          for(int k=0; k < dims.size(); k++)
+            std::cout << dims[k] << " ";
+
+          auto m_type = get_mwnn_type_tvm(dtypes[j].code);
+          std::cout << "\nInput Type : " << (int)m_type;
+
+          //Fills Graph Input Tensor Details - Name, Dims
+          metawarenn::Tensor m_ip_tensor(ip_name, m_type, dims);
+          graph_->set_graph_ip_names(ip_name);
+          graph_->set_graph_ip_tensor(m_ip_tensor);
+        }
+      }
+      else if (node.GetOpType() == "const") {
+        uint32_t eid = EntryID(nid, 0);
+        std::string name = "node_" + std::to_string(nid);
+        const DLTensor* data = data_entry_[eid];
+        if(data->shape == 0 && data->ndim == 0)
+          continue;
+        std::vector<int> dims(data->shape, data->shape + data->ndim);
+        auto total_elements = std::accumulate(begin(dims), end(dims), 1, std::multiplies<int>());
+        std::vector<float> tensor_vec(((float*)(data->data)), ((float*)(data->data)) + total_elements);
+
+        auto m_type = get_mwnn_type_tvm(data->dtype.code);
+        metawarenn::Tensor m_tensor(name, dims, m_type, tensor_vec);
+        graph_->set_graph_initializers(m_tensor);
+        graph_->initializer_names.insert(name);
+        std::cout << "\n Const Node : " << name << " Dims : ";
+        for (auto di : dims)
+            std::cout << di << ",";
+      }
+    }
     for (int id = 0; id < nodes_.size(); id++) {
       const auto& node = nodes_[id];
       //std::cout << "\n Node Op Type : " << node.GetOpType() << " Name : " << node.GetOpName();
@@ -188,8 +238,12 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
             ip_name = "node_" + std::to_string(in_node.id_) + "_" + std::to_string(in_node.index_);
           node_inputs.emplace_back(ip_name);
         }
-        if(prev_out_index > out_index)
+        if(prev_out_index >= out_index)
           out_index = prev_out_index + 1;
+        // Check if node output index clashes with the const/Input index, if so use the next index for node output
+        while(nid_set.count(out_index)) {
+          out_index = out_index + 1;
+        }
         prev_out_index = out_index;
         // Node Output Parsing
         for (int i = 0; i < node.GetNumOutput(); ++i) {
@@ -537,13 +591,25 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           node_name = node_op_type + std::to_string(layer_count++);
           auto axis = node.GetAttr<std::vector<std::string>>("axis");
           auto indices_or_sections = node.GetAttr<std::vector<std::string>>("indices_or_sections");
-          auto split_val = std::stof(indices_or_sections[0]);
+          int num_splits = node.GetNumOutput();
+          float split_val = std::stof(indices_or_sections[0]);
+          std::vector<float> split(num_splits);
+          auto out_shape = node.GetOpShape();
+          int i = 0;
+          // To Handle more than 2 splits & output shape has the ONNX required split info in index 4
+          if(num_splits > 2) {
+            for(auto shape: out_shape)
+              split[i++] = shape[4];
+          }
+          // To Handle 2 splits and indices_or_sections carries the split size
+          else
+            split = {split_val, split_val};
           metawarenn::Attribute attr_axis;
           if(tf_tvm_to_onnx)
             attr_axis = metawarenn::Attribute("axis", std::stoi(axis[0])-2); //To handle the layout from HWC(TFLite) to CHW(ONNX)
           else {
             attr_axis = metawarenn::Attribute("axis", std::stoi(axis[0]));
-            metawarenn::Tensor split_tensor(node_name + "_split", std::vector<int>{2}, metawarenn::ElementType::element_type::int64_, std::vector<float>{split_val, split_val});
+            metawarenn::Tensor split_tensor(node_name + "_split", std::vector<int>{num_splits}, metawarenn::ElementType::element_type::int64_, split);
             graph_->set_graph_initializers(split_tensor);
             graph_->initializer_names.insert(split_tensor.get_name());
             node_inputs.emplace_back(split_tensor.get_name());
@@ -628,22 +694,42 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           auto cubic_alpha = node.GetAttr<std::vector<std::string>>("cubic_alpha");
           auto cubic_exclude = node.GetAttr<std::vector<std::string>>("cubic_exclude");
           auto method = node.GetAttr<std::vector<std::string>>("method");
+          auto size_param = node.GetAttr<std::vector<std::string>>("size");
+          auto out_shape = node.GetOpShape();
+          std::vector<float> size_vec(4);
+          int i = 0;
+          for(auto shape: out_shape)
+            for(auto sh: shape)
+              size_vec[i++] = float(sh);
           if(method[0] == "nearest_neighbor")
             method[0] = "nearest";
           auto rounding_method = node.GetAttr<std::vector<std::string>>("rounding_method");
           if(rounding_method[0] == "round")
             rounding_method[0] = "round_prefer_floor";
 
-          metawarenn::Attribute attr_cord_trans_mode("coordinate_transformation_mode", cord_trans_mode);
+          metawarenn::Attribute attr_cord_trans_mode("coordinate_transformation_mode", cord_trans_mode[0]);
           node_attributes.emplace_back(attr_cord_trans_mode);
           metawarenn::Attribute attr_cubic_alpha("cubic_coeff_a", std::stof(cubic_alpha[0]));
           node_attributes.emplace_back(attr_cubic_alpha);
           metawarenn::Attribute attr_cubic_exclude("exclude_outside", std::stoi(cubic_exclude[0]));
           node_attributes.emplace_back(attr_cubic_exclude);
-          metawarenn::Attribute attr_method("mode", method);
+          metawarenn::Attribute attr_method("mode", method[0]);
           node_attributes.emplace_back(attr_method);
-          metawarenn::Attribute attr_rounding_method("nearest_mode", rounding_method);
+          metawarenn::Attribute attr_rounding_method("nearest_mode", rounding_method[0]);
           node_attributes.emplace_back(attr_rounding_method);
+          // ROI, Scale is not available in node attribute. Adding empty vector to maintain the tensor order in ONNX
+          metawarenn::Tensor roi_tensor(node_name + "_roi", std::vector<int>({0}), metawarenn::ElementType::element_type::float_, {});
+          graph_->set_graph_initializers(roi_tensor);
+          graph_->initializer_names.insert(roi_tensor.get_name());
+          node_inputs.emplace_back(roi_tensor.get_name());
+          metawarenn::Tensor scale_tensor(node_name + "_scale", std::vector<int>({0}), metawarenn::ElementType::element_type::float_, {});
+          graph_->set_graph_initializers(scale_tensor);
+          graph_->initializer_names.insert(scale_tensor.get_name());
+          node_inputs.emplace_back(scale_tensor.get_name());
+          metawarenn::Tensor size_tensor(node_name + "_size", std::vector<int>({size_vec.size()}), metawarenn::ElementType::element_type::int64_, size_vec);
+          graph_->set_graph_initializers(size_tensor);
+          graph_->initializer_names.insert(size_tensor.get_name());
+          node_inputs.emplace_back(size_tensor.get_name());
           }
         else if (node.GetOpName() == "image.crop_and_resize") {
           node_op_type = "Resize";
@@ -659,7 +745,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           node_attributes.emplace_back(attr_cord_trans_mode);
           metawarenn::Attribute attr_extrapolation_value("extrapolation_value", std::stof(extrapolation_value[0]));
           node_attributes.emplace_back(attr_extrapolation_value);
-          metawarenn::Attribute attr_method("mode", method);
+          metawarenn::Attribute attr_method("mode", method[0]);
           node_attributes.emplace_back(attr_method);
         }
         else if (node.GetOpName() == "nn.pad") {
@@ -675,6 +761,18 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           graph_->set_graph_initializers(reshape_tensor);
           graph_->initializer_names.insert(pad_ip_name);
           node_inputs[1] = pad_ip_name;
+        }
+        else if (node.GetOpName() == "sigmoid") {
+          node_op_type = "Sigmoid";
+          node_name = node_op_type + std::to_string(layer_count++);
+        }
+        else if (node.GetOpName() == "log") {
+          node_op_type = "Log";
+          node_name = node_op_type + std::to_string(layer_count++);
+        }
+        else if (node.GetOpName() == "tanh") {
+          node_op_type = "Tanh";
+          node_name = node_op_type + std::to_string(layer_count++);
         }
         else {
           std::cout << "\n Unsupported Op in MetaWareNN backend : " << node.GetOpName();
@@ -700,57 +798,30 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     //Add Outputs
     auto m_type = get_mwnn_type_tvm(dtypes[0].code);
     //Fills Graph Output Tensor Details - Name, Dims
-    metawarenn::Tensor m_op_tensor(op_name, m_type, dims);
-    graph_->set_graph_op_tensor(m_op_tensor);
-    graph_->set_graph_op_names(m_op_tensor.get_name());
-
-    // Add inputs and constants.
-    for (size_t i = 0; i < input_nodes_.size(); ++i) {
-      auto nid = input_nodes_[i];
-      const auto& node = nodes_[nid];
-      std::string ip_name = "node_" + std::to_string(nid);
-      if (node.GetOpType() == "input") {
-        auto shapes = node.GetOpShape();
-        auto dtypes = node.GetOpDataType();
-
-        for (size_t j = 0; j < shapes.size(); ++j) {
-          auto shape = shapes[j];
-          int size = shape.size();
-          std::vector<int> dims(size);
-          for(int d = 0; d < size; d++)
-            dims[d] = shape[d];
-          std::cout << "\nInput Name : " << ip_name;
-          std::cout << "\nInput Dims : ";
-          for(int k=0; k < dims.size(); k++)
-            std::cout << dims[k] << " ";
-
-          auto m_type = get_mwnn_type_tvm(dtypes[j].code);
-          std::cout << "\nInput Type : " << (int)m_type;
-
-          //Fills Graph Input Tensor Details - Name, Dims
-          metawarenn::Tensor m_ip_tensor(ip_name, m_type, dims);
-          graph_->set_graph_ip_names(ip_name);
-          graph_->set_graph_ip_tensor(m_ip_tensor);
-        }
+    std::cout << "\n Graph outputs: ";
+    std::string out_name;
+    // TODO: Handle node output name difference from graph output id & combine checks
+    // For multiple output nodes
+    if(outputs_.size() > 1) {
+      for (auto output : outputs_) {
+        out_name = "node_" + std::to_string(output.id_) + "_" + std::to_string(output.index_);
+        std::cout << out_name << ", ";
+        auto out_shape = nodes_[output.id_].GetOpShape();
+        std::vector<int> dims;
+        for(int m = 0; m < out_shape.size(); m++)
+          for(int n = 0; n < out_shape[m].size(); n++) {
+            dims.push_back(out_shape[m][n]);
+          }
+        metawarenn::Tensor m_op_tensor(out_name, m_type, dims);
+        graph_->set_graph_op_tensor(m_op_tensor);
+        graph_->set_graph_op_names(m_op_tensor.get_name());
       }
-      else if (node.GetOpType() == "const") {
-        uint32_t eid = EntryID(nid, 0);
-        std::string name = "node_" + std::to_string(nid);
-        const DLTensor* data = data_entry_[eid];
-        if(data->shape == 0 && data->ndim == 0)
-          continue;
-        std::vector<int> dims(data->shape, data->shape + data->ndim);
-        auto total_elements = std::accumulate(begin(dims), end(dims), 1, std::multiplies<int>());
-        std::vector<float> tensor_vec(((float*)(data->data)), ((float*)(data->data)) + total_elements);
-
-        auto m_type = get_mwnn_type_tvm(data->dtype.code);
-        metawarenn::Tensor m_tensor(name, dims, m_type, tensor_vec);
-        graph_->set_graph_initializers(m_tensor);
-        graph_->initializer_names.insert(name);
-        std::cout << "\n Const Node : " << name << " Dims : ";
-        for (auto di : dims)
-            std::cout << di << ",";
-      }
+    }
+    // For single output nodes
+    else {
+      metawarenn::Tensor m_op_tensor(op_name, m_type, dims);
+      graph_->set_graph_op_tensor(m_op_tensor);
+      graph_->set_graph_op_names(m_op_tensor.get_name());
     }
   }
 

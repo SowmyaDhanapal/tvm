@@ -28,3 +28,6 @@ zfnet512-7.onnx
 efficientnet-lite4-11.onnx
 shufflenet-v2-10.onnx
 mnist-7.onnx
+tinyyolov2-7.onnx
+yolov2-coco-9.onnx
+yolov4.onnx
