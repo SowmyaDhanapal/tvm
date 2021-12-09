@@ -79,6 +79,7 @@ _register_external_op_helper("sigmoid")
 _register_external_op_helper("log")
 _register_external_op_helper("tanh")
 _register_external_op_helper("image.resize2d")
+_register_external_op_helper("nn.upsampling")
 
 def partition_for_metawarenn(mod, params=None):
     """Partition the graph greedily offloading supported operators to MetaWareNN.

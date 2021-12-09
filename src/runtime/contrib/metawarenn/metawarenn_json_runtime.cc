@@ -279,21 +279,6 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           node_attributes.emplace_back(attr_pad);
           metawarenn::Attribute attr_stride("strides", std::vector<int>({std::stoi(strides[0]), std::stoi(strides[1])}));
           node_attributes.emplace_back(attr_stride);
-          if(id+2 < nodes_.size()) {
-            for(int k = id+1; k <= id+2; k++) {
-              const auto& bias_node = nodes_[k];
-              if(bias_node.GetOpType() == "kernel" && bias_node.GetOpName() == "nn.bias_add") {
-                //BiasNode Input Parsing
-                auto bias_in_node = bias_node.GetInputs()[1];//index-0 --> Feature Tensor, index-1 Bias Values
-                std::string ip_name = "node_" + std::to_string(bias_in_node.id_);
-                node_inputs.emplace_back(ip_name);
-                merged_node_ids.insert(k);
-                op_name = "node_" + std::to_string(bias_in_node.id_+1) + "_" + std::to_string(bias_in_node.index_);
-                node_outputs[0] = op_name;
-                prev_out_index = bias_in_node.id_+1;
-              }
-            }
-          }
         }
         else if (node.GetOpName() == "nn.conv2d_transpose") {
           node_op_type = "ConvTranspose";
@@ -542,16 +527,27 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           node_name = node_op_type + std::to_string(layer_count++);
         }
         else if (node.GetOpName() == "nn.upsampling" || node.GetOpName() == "nn.upsampling3d") {
-          node_op_type = "Upsample";
+          node_op_type = "Resize";
           node_name = node_op_type + std::to_string(layer_count++);
-          auto method = node.GetAttr<std::string>("method");
-          if(method == "nearest_neighbor")
-            method = "nearest";
+          auto method = node.GetAttr<std::vector<std::string>>("method");
+          auto scale_h = node.GetAttr<std::vector<std::string>>("scale_h");
+          auto scale_w = node.GetAttr<std::vector<std::string>>("scale_w");
+          std::vector<float> scales = {1, 1, std::stof(scale_h[0]), std::stof(scale_w[0])};
+          if(method[0] == "nearest_neighbor")
+            method[0] = "nearest";
           else
-            method = "linear"; //Gets handled in onnx based on dims
+            method[0] = "linear"; //Gets handled in onnx based on dims
 
-          metawarenn::Attribute attr_method("mode", method);
+          metawarenn::Attribute attr_method("mode", method[0]);
           node_attributes.emplace_back(attr_method);
+          metawarenn::Tensor roi_tensor(node_name + "_roi", std::vector<int>({0}), metawarenn::ElementType::element_type::float_, {});
+          graph_->set_graph_initializers(roi_tensor);
+          graph_->initializer_names.insert(roi_tensor.get_name());
+          node_inputs.emplace_back(roi_tensor.get_name());
+          metawarenn::Tensor scale_tensor(node_name + "_scale", std::vector<int>({4}), metawarenn::ElementType::element_type::float_, scales);
+          graph_->set_graph_initializers(scale_tensor);
+          graph_->initializer_names.insert(scale_tensor.get_name());
+          node_inputs.emplace_back(scale_tensor.get_name());
         }
         else if (node.GetOpName() == "sum") {
           node_op_type = "Sum";
@@ -774,6 +770,10 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           node_op_type = "Tanh";
           node_name = node_op_type + std::to_string(layer_count++);
         }
+        else if (node.GetOpName() == "nn.bias_add") {
+          node_op_type = "Add";
+          node_name = node_op_type + std::to_string(layer_count++);
+        }
         else {
           std::cout << "\n Unsupported Op in MetaWareNN backend : " << node.GetOpName();
           exit(1);
@@ -805,7 +805,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     if(outputs_.size() > 1) {
       for (auto output : outputs_) {
         out_name = "node_" + std::to_string(output.id_) + "_" + std::to_string(output.index_);
-        std::cout << out_name << ", ";
+        std::cout << "\n" << out_name << ", ";
         auto out_shape = nodes_[output.id_].GetOpShape();
         std::vector<int> dims;
         for(int m = 0; m < out_shape.size(); m++)
@@ -838,12 +838,29 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
       }
   }
 
+void register_expand_dim(::metawarenn::optimizer::PassManager *manager, metawarenn::Tensor g_t) {
+  for (auto g_n : graph_->get_graph_nodes()) {
+    if(g_n.get_op_type() == "Mul" || g_n.get_op_type() == "Add") {
+      for (auto n_ip : g_n.get_inputs()) {
+        if(g_t.get_name() == n_ip) {
+          std::cout << "\n Less Dimensiosna Name : " << g_t.get_name();
+          std::cout << "\t Dims : ";
+          for (auto dim : g_t.get_dims())
+            std::cout << dim << ",";
+          ::metawarenn::optimizer::ExpandDimension ed(graph_, g_t);
+          manager->register_pass(ed);
+        }
+      }
+    }
+  }
+}
+
   void ApplyPasses() {
     ::metawarenn::optimizer::PassManager manager;
     auto node_list = graph_->get_graph_nodes();
     auto tf_flag = std::getenv("TF_TVM_TO_ONNX");
     bool tf_tvm_to_onnx = atoi(tf_flag);
-    if(CHW_TO_HWC || HWC_TO_CHW || tf_tvm_to_onnx)
+    if(tf_tvm_to_onnx)
     {
       for (auto g_t : graph_->get_graph_initializers()) {
         if(g_t.get_dims().size() == 4) {
@@ -854,21 +871,8 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           ::metawarenn::optimizer::ConvertLayout cl(graph_, g_t, CHW_TO_HWC, HWC_TO_CHW, tf_tvm_to_onnx, true);
           manager.register_pass(cl);
         }
-        else if(tf_tvm_to_onnx){
-          for (auto g_n : graph_->get_graph_nodes()) {
-            if(g_n.get_op_type() == "Mul" || g_n.get_op_type() == "Add") {
-              for (auto n_ip : g_n.get_inputs()) {
-                if(g_t.get_name() == n_ip) {
-                  std::cout << "\n Less Dimensiosna Name : " << g_t.get_name();
-                  std::cout << "\t Dims : ";
-                  for (auto dim : g_t.get_dims())
-                    std::cout << dim << ",";
-                  ::metawarenn::optimizer::ExpandDimension ed(graph_, g_t);
-                  manager.register_pass(ed);
-                }
-              }
-            }
-          }
+        else {
+          register_expand_dim(&manager, g_t);
         }
       }
       for (auto g_t : graph_->get_graph_ip_tensor()) {
@@ -879,6 +883,13 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
             std::cout << dim << ",";
           ::metawarenn::optimizer::ConvertLayout cl(graph_, g_t, CHW_TO_HWC, HWC_TO_CHW, tf_tvm_to_onnx, false);
           manager.register_pass(cl);
+        }
+      }
+    }
+    else {
+      for (auto g_t : graph_->get_graph_initializers()) {
+        if(g_t.get_dims().size() < 4) {
+          register_expand_dim(&manager, g_t);
         }
       }
     }

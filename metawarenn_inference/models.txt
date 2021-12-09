@@ -31,3 +31,4 @@ mnist-7.onnx
 tinyyolov2-7.onnx
 yolov2-coco-9.onnx
 yolov4.onnx
+retinanet-9.onnx
