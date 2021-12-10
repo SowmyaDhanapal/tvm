@@ -147,6 +147,54 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
   #if EXECUTABLE_GRAPH_SERIALIZATION
   std::shared_ptr<::metawarenn::ExecutableGraph> exe_graph_;
   #endif
+  bool quant_model = false;
+  std::string quant_prev_scale;
+  std::string quant_prev_zp;
+
+  void CreateMWNNNode(const std::string &node_name_,
+                      const std::string &node_op_type_,
+                      const std::vector<::metawarenn::Attribute> &node_attributes_,
+                      const std::vector<std::string> &node_inputs_,
+                      const std::vector<std::string> &node_outputs_) {
+    metawarenn::Node m_node(node_name_, node_op_type_, node_attributes_, node_inputs_, node_outputs_);
+    graph_->set_graph_nodes(m_node);
+
+    std::cout << "\n ================================Node=============================\n";
+    std::cout << "\n Name : " << node_name_;
+    std::cout << "\n Type : " << node_op_type_;
+    for (auto nip: node_inputs_)
+      std::cout << "\n Inputs : " << nip;
+    for (auto nop: node_outputs_)
+      std::cout << "\n Outputs : " << nop;
+  }
+
+  void CreateQDQNodes(std::string ip_name, std::string op_name,
+                      std::string scale_name, std::string zp_name) {
+    std::string quant_node_op_type = "QuantizeLinear";
+    std::string quant_node_name = quant_node_op_type + "_" + ip_name;
+    std::vector<std::string> quant_node_inputs;
+    std::vector<std::string> quant_node_outputs;
+    std::vector<::metawarenn::Attribute> quant_node_attributes;
+    quant_node_inputs.push_back(ip_name);
+    quant_node_inputs.push_back(scale_name);//Output Scale
+    quant_node_inputs.push_back(zp_name);//Output ZeroPoint
+    quant_node_outputs.push_back(quant_node_name);
+    CreateMWNNNode(quant_node_name, quant_node_op_type, quant_node_attributes, quant_node_inputs, quant_node_outputs);
+
+    std::string dequant_node_op_type = "DequantizeLinear";
+    std::string dequant_node_name = dequant_node_op_type + "_" + ip_name;
+    std::vector<std::string> dequant_node_inputs;
+    std::vector<std::string> dequant_node_outputs;
+    std::vector<::metawarenn::Attribute> dequant_node_attributes;
+    dequant_node_inputs.push_back(quant_node_outputs[0]);
+    dequant_node_inputs.push_back(scale_name);//Output Scale
+    dequant_node_inputs.push_back(zp_name);//Output ZeroPoint
+    dequant_node_outputs.push_back(op_name);
+    CreateMWNNNode(dequant_node_name, dequant_node_op_type, dequant_node_attributes, dequant_node_inputs, dequant_node_outputs);
+    quant_prev_scale = scale_name;
+    quant_prev_zp = zp_name;
+  }
+
   // Build up the engine based on the input graph.
   void BuildMetaWareNNGraph() {
     graph_count++;
@@ -161,6 +209,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     std::string op_name;
     std::set<int> merged_node_ids;
     int prev_out_index = 0;
+    std::map<std::string, std::string> quant_ip_mapper;
     std::cout << "\n nodes_.size() : " << nodes_.size();
     std::set<int> nid_set;
     // Add inputs and constants.
@@ -187,6 +236,35 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           auto m_type = get_mwnn_type_tvm(dtypes[j].code);
           std::cout << "\nInput Type : " << (int)m_type;
 
+          if(static_cast<int>(dtypes[j].code) == kDLUInt) {
+            quant_model = true;
+            m_type = metawarenn::ElementType::element_type::uint8_;
+            std::string dequant_node_op_type = "DequantizeLinear";
+            std::string dequant_node_name = dequant_node_op_type + "_" + ip_name;
+            std::vector<std::string> dequant_node_inputs;
+            std::vector<std::string> dequant_node_outputs;
+            std::vector<::metawarenn::Attribute> dequant_node_attributes;
+
+            std::string scale_name = dequant_node_name + std::string("_scale");
+            std::vector<float> tensor_vec_scale = {0.0078125};
+            ::metawarenn::Tensor scale_tensor(scale_name, std::vector<int>({tensor_vec_scale.size()}), metawarenn::ElementType::element_type::float_, tensor_vec_scale);
+            graph_->set_graph_initializers(scale_tensor);
+            graph_->initializer_names.insert(scale_name);
+
+            std::string zp_name = dequant_node_name + std::string("_zero_point");
+            std::vector<float> tensor_vec_zp = {128};
+            ::metawarenn::Tensor zp_tensor(zp_name, std::vector<int>({tensor_vec_zp.size()}), metawarenn::ElementType::element_type::uint8_, tensor_vec_zp);
+            graph_->set_graph_initializers(zp_tensor);
+            graph_->initializer_names.insert(zp_name);
+
+            dequant_node_inputs.push_back(ip_name);
+            dequant_node_inputs.push_back(scale_name);//Scale
+            dequant_node_inputs.push_back(zp_name);//ZeroPoint
+            dequant_node_outputs.push_back(dequant_node_name);
+            CreateMWNNNode(dequant_node_name, dequant_node_op_type, dequant_node_attributes, dequant_node_inputs, dequant_node_outputs);
+            quant_ip_mapper[ip_name] = dequant_node_name;
+        }
+
           //Fills Graph Input Tensor Details - Name, Dims
           metawarenn::Tensor m_ip_tensor(ip_name, m_type, dims);
           graph_->set_graph_ip_names(ip_name);
@@ -197,13 +275,28 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         uint32_t eid = EntryID(nid, 0);
         std::string name = "node_" + std::to_string(nid);
         const DLTensor* data = data_entry_[eid];
-        if(data->shape == 0 && data->ndim == 0)
-          continue;
         std::vector<int> dims(data->shape, data->shape + data->ndim);
         auto total_elements = std::accumulate(begin(dims), end(dims), 1, std::multiplies<int>());
-        std::vector<float> tensor_vec(((float*)(data->data)), ((float*)(data->data)) + total_elements);
-
-        auto m_type = get_mwnn_type_tvm(data->dtype.code);
+        metawarenn::ElementType::element_type m_type;
+        std::vector<float> tensor_vec;
+        if(static_cast<int>(data->dtype.code) == kDLUInt) {
+          m_type = metawarenn::ElementType::element_type::uint8_;
+          tensor_vec = std::vector<float>(((uint8_t*)(data->data)), ((uint8_t*)(data->data)) + total_elements);
+        }
+        else if(static_cast<int>(data->dtype.code) == kDLFloat) {
+          m_type = metawarenn::ElementType::element_type::float_;
+          tensor_vec = std::vector<float>(((float*)(data->data)), ((float*)(data->data)) + total_elements);
+        }
+        else if(static_cast<int>(data->dtype.code) == kDLInt) {
+          m_type = metawarenn::ElementType::element_type::int32_;
+          tensor_vec = std::vector<float>(((int32_t*)(data->data)), ((int32_t*)(data->data)) + total_elements);
+        }
+        else{
+          std::cout << "\n Error: Unhandled constant datatype!!!";
+          exit(1);
+        }
+        //if(data->shape == 0 && data->ndim == 0)
+        //  continue;
         metawarenn::Tensor m_tensor(name, dims, m_type, tensor_vec);
         graph_->set_graph_initializers(m_tensor);
         graph_->initializer_names.insert(name);
@@ -236,7 +329,10 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           // Check if the input is computational node output & append the index with ip_name
           else
             ip_name = "node_" + std::to_string(in_node.id_) + "_" + std::to_string(in_node.index_);
-          node_inputs.emplace_back(ip_name);
+          if(quant_ip_mapper.count(ip_name) == 0)
+            node_inputs.emplace_back(ip_name);
+          else
+            node_inputs.emplace_back(quant_ip_mapper[ip_name]);
         }
         if(prev_out_index >= out_index)
           out_index = prev_out_index + 1;
@@ -376,6 +472,13 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           node_attributes.emplace_back(attr_pad);
           metawarenn::Attribute attr_stride("strides", std::vector<int>({std::stoi(strides[0]), std::stoi(strides[1])}));
           node_attributes.emplace_back(attr_stride);
+
+          if(quant_model) {
+            std::string dequant_node_op_type = "DequantizeLinear";
+            std::string dequant_node_name = dequant_node_op_type + "_" + node_outputs[0];
+            CreateQDQNodes(node_outputs[0], dequant_node_name, quant_prev_scale, quant_prev_zp);
+            quant_ip_mapper[node_outputs[0]] = dequant_node_name;
+          }
         }
         else if (node.GetOpName() == "nn.lrn") {
           node_op_type = "LRN";
@@ -774,20 +877,128 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           node_op_type = "Add";
           node_name = node_op_type + std::to_string(layer_count++);
         }
+        else if(node.GetOpName() == "qnn.conv2d") {
+          float ip_scale=0.0, w_scale=0.0;
+          graph_->update_initializer_tensor_type(node_inputs[3], metawarenn::ElementType::element_type::uint8_);
+          for(auto g_t : graph_->get_graph_initializers()) {
+            if(g_t.get_name() == node_inputs[4]) { //Input Scale
+              ip_scale = g_t.get_tensor()[0];
+            }
+            else if(g_t.get_name() == node_inputs[5]) { //Weight Scale
+              w_scale = g_t.get_tensor()[0];
+            }
+          }
+
+          std::string dequant_node_op_type = "DequantizeLinear";
+          std::string dequant_node_name = dequant_node_op_type + "_" + node_inputs[1];
+          std::vector<std::string> dequant_node_inputs;
+          std::vector<std::string> dequant_node_outputs;
+          std::vector<::metawarenn::Attribute> dequant_node_attributes;
+          dequant_node_inputs.push_back(node_inputs[1]);
+          dequant_node_inputs.push_back(node_inputs[5]);//Weight Scale
+          dequant_node_inputs.push_back(node_inputs[3]);//Weight ZeroPoint
+          dequant_node_outputs.push_back(dequant_node_name);
+          CreateMWNNNode(dequant_node_name, dequant_node_op_type, dequant_node_attributes, dequant_node_inputs, dequant_node_outputs);
+          node_inputs.erase(node_inputs.begin()+2, node_inputs.begin()+6);
+          node_inputs[1] = dequant_node_outputs[0];//Replace with Dequant node output
+
+          node_op_type = "Conv";
+          node_name = node_op_type + std::to_string(layer_count++);
+          std::vector<std::string> strides = node.GetAttr<std::vector<std::string>>("strides");
+          std::vector<std::string> pads = node.GetAttr<std::vector<std::string>>("padding");
+          std::vector<std::string> dilations = node.GetAttr<std::vector<std::string>>("dilation");
+          std::vector<std::string> kernel_size = node.GetAttr<std::vector<std::string>>("kernel_size");
+          int group = std::stoi(node.GetAttr<std::vector<std::string>>("groups")[0]);
+          auto weight_entry = node.GetInputs()[1];
+
+          metawarenn::Attribute attr_dilate("dilations", std::vector<int>({std::stoi(dilations[0]), std::stoi(dilations[1])}));
+          node_attributes.emplace_back(attr_dilate);
+          metawarenn::Attribute attr_group("group", group);
+          node_attributes.emplace_back(attr_group);
+          metawarenn::Attribute attr_kernel_shape("kernel_shape", std::vector<int>({std::stoi(kernel_size[0]), std::stoi(kernel_size[1])}));
+          node_attributes.emplace_back(attr_kernel_shape);
+          metawarenn::Attribute attr_pad("pads", std::vector<int>({std::stoi(pads[0]), std::stoi(pads[1]), std::stoi(pads[2]), std::stoi(pads[3])}));
+          node_attributes.emplace_back(attr_pad);
+          metawarenn::Attribute attr_stride("strides", std::vector<int>({std::stoi(strides[0]), std::stoi(strides[1])}));
+          node_attributes.emplace_back(attr_stride);
+
+          if(id+2 < nodes_.size()) {
+            for(int k = id+1; k <= id+2; k++) {
+              const auto& bias_node = nodes_[k];
+              if(bias_node.GetOpType() == "kernel" && bias_node.GetOpName() == "nn.bias_add") {
+                //BiasNode Input Parsing
+                auto bias_in_node = bias_node.GetInputs()[1];//index-0 --> Feature Tensor, index-1 Bias Values
+                std::string ip_name = "node_" + std::to_string(bias_in_node.id_);
+
+                std::string dequant_node_op_type = "DequantizeLinear";
+                std::string dequant_node_name = dequant_node_op_type + "_" + ip_name;
+                std::vector<std::string> dequant_node_inputs;
+                std::vector<std::string> dequant_node_outputs;
+                std::vector<::metawarenn::Attribute> dequant_node_attributes;
+
+                std::string scale_name = ip_name + std::string("_scale");
+                std::vector<float> tensor_vec_scale = {ip_scale*w_scale};
+                ::metawarenn::Tensor scale_tensor(scale_name, std::vector<int>({tensor_vec_scale.size()}), ::metawarenn::ElementType::element_type::float_, tensor_vec_scale);
+                graph_->set_graph_initializers(scale_tensor);
+                graph_->initializer_names.insert(scale_name);
+
+                std::string zp_name = ip_name + std::string("_zero_point");
+                std::vector<float> tensor_vec_zp = {0};
+                ::metawarenn::Tensor zp_tensor(zp_name, std::vector<int>({tensor_vec_zp.size()}), ::metawarenn::ElementType::element_type::int32_, tensor_vec_zp);
+                graph_->set_graph_initializers(zp_tensor);
+                graph_->initializer_names.insert(zp_name);
+
+                dequant_node_inputs.push_back(ip_name);
+                dequant_node_inputs.push_back(scale_name);//Bias Scale
+                dequant_node_inputs.push_back(zp_name);//Bias ZeroPoint
+                dequant_node_outputs.push_back(dequant_node_name);
+                CreateMWNNNode(dequant_node_name, dequant_node_op_type, dequant_node_attributes, dequant_node_inputs, dequant_node_outputs);
+
+                node_inputs.emplace_back(dequant_node_outputs[0]);
+                merged_node_ids.insert(k);
+                op_name = "node_" + std::to_string(bias_in_node.id_+1) + "_" + std::to_string(bias_in_node.index_);
+                node_outputs[0] = op_name;
+                prev_out_index = bias_in_node.id_+1;
+              }
+            }
+          }
+        }
+        else if (node.GetOpName() ==  "qnn.requantize") {
+          //https://github.com/apache/tvm/blob/26281792e92ae24ec7a14b11e8df8fbacf9c4882/python/tvm/relay/frontend/tflite.py#L2196
+          graph_->update_initializer_tensor_type(node_inputs[4], metawarenn::ElementType::element_type::uint8_);//Update ZeroPoint Datatype
+          CreateQDQNodes(node_inputs[0], node_outputs[0], node_inputs[3], node_inputs[4]);
+          node_inputs.erase(node_inputs.begin()+1, node_inputs.begin()+5);
+          continue;
+        }
+        else if (node.GetOpName() ==  "qnn.add") {
+          //https://github.com/apache/tvm/blob/26281792e92ae24ec7a14b11e8df8fbacf9c4882/python/tvm/relay/frontend/tflite.py#L1270
+          node_op_type = "Add";
+          node_name = node_op_type + std::to_string(layer_count++);
+          graph_->update_initializer_tensor_type(node_inputs[7], metawarenn::ElementType::element_type::uint8_);
+
+          std::string dequant_node_op_type = "DequantizeLinear";
+          std::string dequant_node_name = dequant_node_op_type + "_" + node_outputs[0];
+          CreateQDQNodes(node_outputs[0], dequant_node_name, node_inputs[6], node_inputs[7]);
+          node_inputs.erase(node_inputs.begin()+2, node_inputs.begin()+8);
+          quant_ip_mapper[node_outputs[0]] = dequant_node_name;
+        }
+        else if (node.GetOpName() == "cast") {
+          if (quant_model && !node.HasAttr("dtype")) {
+            quant_ip_mapper[node_outputs[0]] = node_inputs[0];
+            continue;
+          }
+          node_op_type = "Cast";
+          node_name = node_op_type + std::to_string(layer_count++);
+          int data_type = std::stoi(node.GetAttr<std::vector<std::string>>("dtype")[0]);
+          //TODO - Handle for non-quantized model & map data type to onnx
+          //metawarenn::Attribute attr_axis("to", std::stoi(axis[0]));
+          //node_attributes.emplace_back(attr_axis);
+        }
         else {
           std::cout << "\n Unsupported Op in MetaWareNN backend : " << node.GetOpName();
           exit(1);
         }
-        /*std::cout << "\n ================================Node=============================\n";
-        std::cout << "\n Name : " << node_name;
-        std::cout << "\n Type : " << node_op_type;
-        for (auto nip: node_inputs)
-          std::cout << "\n Inputs : " << nip;
-        for (auto nop: node_outputs)
-          std::cout << "\n Outputs : " << nop;*/
-
-        metawarenn::Node m_node(node_name, node_op_type, node_attributes, node_inputs, node_outputs);
-        graph_->set_graph_nodes(m_node);
+        CreateMWNNNode(node_name, node_op_type, node_attributes, node_inputs, node_outputs);
       }
     }
     std::vector<int> dims;
@@ -819,6 +1030,22 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     }
     // For single output nodes
     else {
+        if(static_cast<int>(dtypes[0].code) == kDLUInt) {
+          m_type = metawarenn::ElementType::element_type::uint8_;
+          std::string quant_node_op_type = "QuantizeLinear";
+          std::string quant_node_name = quant_node_op_type + "_" + op_name;
+          std::vector<std::string> quant_node_inputs;
+          std::vector<std::string> quant_node_outputs;
+          std::vector<::metawarenn::Attribute> quant_node_attributes;
+
+          quant_node_inputs.push_back(op_name);
+          quant_node_inputs.push_back(quant_prev_scale);//Scale
+          quant_node_inputs.push_back(quant_prev_zp);//ZeroPoint
+          quant_node_outputs.push_back(quant_node_name);
+          CreateMWNNNode(quant_node_name, quant_node_op_type, quant_node_attributes, quant_node_inputs, quant_node_outputs);
+          op_name = quant_node_name;
+        }
+
       metawarenn::Tensor m_op_tensor(op_name, m_type, dims);
       graph_->set_graph_op_tensor(m_op_tensor);
       graph_->set_graph_op_names(m_op_tensor.get_name());

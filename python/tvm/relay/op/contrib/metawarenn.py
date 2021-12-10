@@ -80,6 +80,10 @@ _register_external_op_helper("log")
 _register_external_op_helper("tanh")
 _register_external_op_helper("image.resize2d")
 _register_external_op_helper("nn.upsampling")
+_register_external_op_helper("qnn.conv2d")
+_register_external_op_helper("qnn.requantize")
+_register_external_op_helper("qnn.add")
+_register_external_op_helper("cast")
 
 def partition_for_metawarenn(mod, params=None):
     """Partition the graph greedily offloading supported operators to MetaWareNN.
