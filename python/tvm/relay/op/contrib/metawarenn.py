@@ -83,6 +83,10 @@ _register_external_op_helper("nn.upsampling")
 _register_external_op_helper("qnn.conv2d")
 _register_external_op_helper("qnn.requantize")
 _register_external_op_helper("qnn.add")
+_register_external_op_helper("qnn.dequantize")
+_register_external_op_helper("qnn.quantize")
+_register_external_op_helper("qnn.concatenate")
+_register_external_op_helper("qnn.dense")
 _register_external_op_helper("cast")
 
 def partition_for_metawarenn(mod, params=None):

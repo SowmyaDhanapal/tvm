@@ -123,3 +123,11 @@
    3. source env.sh
    4. sh download_tflite_models.sh # (For First time) - Creates tflite_models directory inside tvm/ & downloads models into it
    5. python test_regression_tflite.py # Creates a `op_tflite_models` directory and dump the generated ONNXProto files for all input models & `validation_result.txt` file which contains the comparison of original tflite & generated onnx model
+
+### To Generate the ONNXProto from multiple Quantized TFLite models & Verify
+   1. cd /path/to/tvm/metawarenn_inference
+   2. Set `TF_TVM_TO_ONNX` macro to 1 in `/path/to/tvm/metawarenn_inference/env.sh` line no: 7
+   3. source env.sh
+   4. sh download_tflite_quantized_models.sh # (For First time) - Creates tflite_quantized_models directory inside tvm/ & downloads models into it
+   5. python test_regression_quantized_tflite.py # Creates a `op_tflite_quantized_models` directory and dump the generated ONNXProto files for all input models & `validation_result.txt` file which contains the comparison of original tflite & generated onnx model
+[Note] - Enable `FLOAT_OUTPUT` flag in line no: 12 of `test_regression_quantized_tflite.py` file to get the final outputs in float numbers, by defualt it is uint8
