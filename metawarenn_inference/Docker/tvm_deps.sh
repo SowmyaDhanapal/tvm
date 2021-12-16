@@ -29,6 +29,8 @@ cd ../..
 pip3 install numpy decorator attrs
 pip3 install tornado
 pip3 install onnx
+pip3 install onnxruntime
+pip3 install tensorflow
 pip3 install psutil xgboost cloudpickle
 pip3 install tflite==2.3.0
 git clone --recursive https://github.com/SowmyaDhanapal/tvm.git tvm
