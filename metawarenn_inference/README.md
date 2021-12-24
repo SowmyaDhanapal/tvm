@@ -91,7 +91,7 @@
    4. cmake ..
    5. make -j4
    6. cd tvm/python
-   7. python setup.py install --user
+   7. python3 setup.py install --user
 
 ### To Run the Inference Script 
    1. cd /path/to/tvm/metawarenn_inference
