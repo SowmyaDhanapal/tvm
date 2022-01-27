@@ -38,9 +38,10 @@
 #include "metawarenn_lib/metawarenn_utils.h"
 #include "metawarenn_lib/optimizer/pass_manager.h"
 #include "metawarenn_lib/executable_network/metawarenn_executable_graph.h"
-#include "metawarenn_lib/mwnn_inference_api/mwnn_inference_api.h"
 #include "metawarenn_lib/mwnnconvert/mwnn_protobuf/cpp_wrapper/MWNN.pb.h"
 #include "metawarenn_lib/mwnnconvert/mwnn_to_onnx_proto.h"
+#include "metawarenn_lib/inference_engine/mwnn_inference_engine.h"
+
 #define CHW_TO_HWC 0
 #define HWC_TO_CHW 0
 #define INVOKE_NNAC 0
@@ -79,9 +80,10 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     #if !EXECUTABLE_GRAPH_SERIALIZATION
     write_onnx_proto(graph_);
     #endif
-    //Generate Executable Network
-    #if EXECUTABLE_GRAPH_SERIALIZATION
-    exe_graph_ = std::make_shared<metawarenn::ExecutableGraph>(*graph_);
+    #if INFERENCE_ENGINE
+    inference_engine_ = inference_builder_->CreateInferenceEngine(*graph_);
+    inference_engine_->SerializeToFile();
+    execution_context_ = inference_engine_->CreateExecutionContext();
     #endif
   }
 
@@ -111,41 +113,29 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         graph_outputs[g_op.get_name()] = output_buf;
       }
     }
-    // **************************************** Calls to invoke the MetaWareNN Inference API ************************************
 
-    #if EXECUTABLE_GRAPH_SERIALIZATION
-    ::metawarenn::InferenceApi mwapi;
+    #if INFERENCE_ENGINE
+    auto graph_desc = inference_engine_->GetGraphDesc();
+    std::string ip_name = graph_desc.input_desc[0].tensor_name;
+    std::string op_name = graph_desc.output_desc[0].tensor_name;
+    std::cout << "\n Ip_name : " << ip_name << "Size : " << graph_desc.input_desc[0].size;
+    std::cout << "\n Op_name : " << op_name << "size : " << graph_desc.output_desc[0].size;
 
-    for (auto g_ip : graph_->get_graph_ip_tensor()) {
-      auto ip_shape = g_ip.get_dims();
-      mwapi.prepareInput(graph_inputs[g_ip.get_name()], ip_shape);
-    }
-
-    for (auto g_op : graph_->get_graph_op_tensor()) {
-      auto op_shape = g_op.get_dims();
-      mwapi.prepareOutput(op_shape);
-    }
-
-    mwapi.prepareGraph(graph_->get_name());
-
-    mwapi.runGraph();
-
-    for (auto g_op : graph_->get_graph_op_tensor()) {
-      auto op_shape = g_op.get_dims();
-      mwapi.getOutput(graph_outputs[g_op.get_name()], op_shape);
-    }
+    execution_context_->CopyInputToDevice(graph_inputs[ip_name], graph_desc.input_desc[0].size);
+    execution_context_->Execute();
+    execution_context_->CopyOutputFromDevice(graph_outputs[op_name], graph_desc.output_desc[0].size);
     #endif
-
 
     // ******************************************* Call to invoke the local run function *****************************************
     //::metawarenn::convert_to_mwnn_format(*graph_, graph_inputs, graph_outputs, CHW_TO_HWC);
-    //exe_graph_->runGraph();
   }
 
  private:
   std::shared_ptr<::metawarenn::Graph> graph_;
-  #if EXECUTABLE_GRAPH_SERIALIZATION
-  std::shared_ptr<::metawarenn::ExecutableGraph> exe_graph_;
+  #if INFERENCE_ENGINE
+  std::shared_ptr<metawarenn::Builder> inference_builder_ = std::make_shared<metawarenn::Builder>();
+  std::shared_ptr<metawarenn::InferenceEngine> inference_engine_;
+  std::shared_ptr<metawarenn::ExecutionContext> execution_context_;
   #endif
   bool quant_model = false;
   std::string quant_prev_scale;

@@ -30,7 +30,8 @@ if(USE_METAWARENN_CODEGEN STREQUAL "ON")
     src/runtime/contrib/metawarenn/metawarenn_lib/mwnn_inference_api/*.cc
     src/runtime/contrib/metawarenn/metawarenn_lib/mwnnconvert/*.cc
     src/runtime/contrib/metawarenn/metawarenn_lib/mwnnconvert/mwnn_protobuf/cpp_wrapper/*.cc
-    src/runtime/contrib/metawarenn/metawarenn_lib/mwnnconvert/onnx_protobuf/*.cc)
+    src/runtime/contrib/metawarenn/metawarenn_lib/mwnnconvert/onnx_protobuf/*.cc
+    src/runtime/contrib/metawarenn/metawarenn_lib/inference_engine/*.cc)
 
   list(APPEND RUNTIME_SRCS ${METAWARENN_LIB_SRC})
   file(GLOB METAWARENN_CONTRIB_SRC src/runtime/contrib/metawarenn/metawarenn_json_runtime.cc)
