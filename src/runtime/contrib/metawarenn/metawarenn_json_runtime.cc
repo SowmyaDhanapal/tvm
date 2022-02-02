@@ -37,10 +37,10 @@
 #include "metawarenn_lib/metawarenn_graph.h"
 #include "metawarenn_lib/metawarenn_utils.h"
 #include "metawarenn_lib/optimizer/pass_manager.h"
-#include "metawarenn_lib/executable_network/metawarenn_executable_graph.h"
 #include "metawarenn_lib/mwnnconvert/mwnn_protobuf/cpp_wrapper/MWNN.pb.h"
 #include "metawarenn_lib/mwnnconvert/mwnn_to_onnx_proto.h"
 #include "metawarenn_lib/inference_engine/mwnn_inference_engine.h"
+#include "metawarenn_lib/inference_engine/mwnn_builder.h"
 
 #define CHW_TO_HWC 0
 #define HWC_TO_CHW 0
@@ -77,54 +77,137 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     #if INVOKE_NNAC
       InvokeNNAC();
     #endif
-    #if !EXECUTABLE_GRAPH_SERIALIZATION
-    write_onnx_proto(graph_);
-    #endif
-    #if INFERENCE_ENGINE
-    inference_engine_ = inference_builder_->CreateInferenceEngine(*graph_);
-    inference_engine_->SerializeToFile();
-    execution_context_ = inference_engine_->CreateExecutionContext();
-    #endif
+
+    if(!INFERENCE_ENGINE)
+      write_onnx_proto(graph_);
+
+    if(INFERENCE_ENGINE) {
+      dynamic_shape_ = false;
+      auto ip_tensor = graph_->get_graph_ip_tensor()[0];
+      auto dims = ip_tensor.get_dims();
+      auto name = ip_tensor.get_name();
+      for(int i = 0; i < dims.size(); i++) {
+        if(dims[i] == -1) {
+          dynamic_shape_ = true;
+          input_shape_range_[name][i] = std::make_pair(INT_MAX, INT_MIN);
+        }
+      }
+      builder_config_ = inference_builder_->CreateBuilderConfig();
+      // dynamic_shape_ - yet to verify the flow
+      if(!dynamic_shape_) {
+        inference_engine_ = inference_builder_->CreateInferenceEngine(graph_, builder_config_, false);
+        inference_engine_->SerializeToFile(dynamic_shape_, optimization_profile_);
+        execution_context_ = inference_engine_->CreateExecutionContext();
+      }
+    }
   }
 
   void Run() override {
     std::cout << "\n In MetaWareNN RUNN!!!";
-    std::unordered_map<std::string, float*> graph_inputs;
-    std::unordered_map<std::string, float*> graph_outputs;
+    if(INFERENCE_ENGINE) {
 
-    for (auto g_ip : graph_->get_graph_ip_tensor()) {
-      std::cout << "\n Graph Input  : " << g_ip.get_name();
-      for (size_t i = 0; i < input_nodes_.size(); ++i) {
-        auto nid = input_nodes_[i];
-        if (nodes_[nid].GetOpType() == "input") {
-          auto eid = EntryID(input_nodes_[i], 0);
-          float *input_buf = (float*)(data_entry_[eid]->data);
-          graph_inputs[g_ip.get_name()] = input_buf;
+      bool update_engine = false;
+      if(dynamic_shape_) {
+        bool profile_file_exists = false;
+        //Creates a new optimization profile for dynamic input shapes
+        if(optimization_profile_ == nullptr)
+          optimization_profile_ = inference_builder_->CreateOptimizationProfile();
+        auto profile_path = inference_builder_->GetProfilePath(graph_->get_name(), &profile_file_exists);
+        if(profile_file_exists)
+          input_shape_range_ = optimization_profile_->DeserializeProfileInfo(profile_path);
+      }
+
+      std::unordered_map<std::string, float*> graph_inputs;
+      std::unordered_map<std::string, float*> graph_outputs;
+
+      for (auto g_ip : graph_->get_graph_ip_tensor()) {
+        auto input_name = g_ip.get_name();
+        std::cout << "\n Graph Input  : " << input_name;
+        for (size_t i = 0; i < input_nodes_.size(); ++i) {
+          auto nid = input_nodes_[i];
+          if (nodes_[nid].GetOpType() == "input") {
+            auto eid = EntryID(input_nodes_[i], 0);
+            float *input_buf = (float*)(data_entry_[eid]->data);
+            graph_inputs[input_name] = input_buf;
+
+            if(dynamic_shape_) {
+              if(input_shape_range_.find(input_name) != input_shape_range_.end()) {
+                auto& ip_shape_range_ = input_shape_range_[input_name];
+                const auto& node = nodes_[nid];
+                auto shapes = node.GetOpShape();
+                for (size_t j = 0; j < shapes.size(); j++) {
+                  auto shape = shapes[j];
+                  for(int d = 0; d < shape.size(); d++) {
+                    std::cout << "\n Dimension : " << shape[d];
+                    if (ip_shape_range_.find(d) != ip_shape_range_.end()) {
+                      // Update Minimum Dimension
+                      if (shape[d] < ip_shape_range_[d].first) {
+                        ip_shape_range_[d].first = shape[d];
+                        update_engine = true;
+                      }
+                      // Update Maximum Dimension
+                      if(shape[d] > ip_shape_range_[d].second) {
+                        ip_shape_range_[d].second = shape[d];
+                        update_engine = true;
+                      }
+                    }
+                  }
+                }
+                optimization_profile_->SetInputDimensions(input_name, ip_shape_range_);
+              }
+            }
+          }
         }
       }
-    }
-    for (auto g_op : graph_->get_graph_op_tensor()) {
-      std::cout << "\n Graph Output  : " << g_op.get_name();
-      for (size_t i = 0; i < outputs_.size(); ++i) {
-        auto eid = EntryID(outputs_[i]);
-        size_t buffer_size = GetDataSize(*data_entry_[eid]);
-        std::cout << "\n Output eid : " << eid << " buffer_size : " << buffer_size;
-        float *output_buf = (float*)(data_entry_[eid]->data);
-        graph_outputs[g_op.get_name()] = output_buf;
+      for (auto g_op : graph_->get_graph_op_tensor()) {
+        std::cout << "\n Graph Output  : " << g_op.get_name();
+        for (size_t i = 0; i < outputs_.size(); ++i) {
+          auto eid = EntryID(outputs_[i]);
+          size_t buffer_size = GetDataSize(*data_entry_[eid]);
+          std::cout << "\n Output eid : " << eid << " buffer_size : " << buffer_size;
+          float *output_buf = (float*)(data_entry_[eid]->data);
+          graph_outputs[g_op.get_name()] = output_buf;
+        }
       }
+
+
+      if (dynamic_shape_) {
+        std::cout << "\n Creating Engine, Context for Dynamic Input shapes";
+        builder_config_->AddOptimizationProfile(optimization_profile_);
+        inference_engine_ = inference_builder_->CreateInferenceEngine(graph_, builder_config_, update_engine);
+        auto graph_desc = inference_engine_->GetGraphDesc();
+
+        for (size_t i = 0; i < input_nodes_.size(); ++i) {
+          auto nid = input_nodes_[i];
+          if (nodes_[nid].GetOpType() == "input") {
+            const auto& node = nodes_[nid];
+            auto shapes = node.GetOpShape();
+            uint64_t size = 1;
+            for (size_t j = 0; j < shapes.size(); j++) {
+              auto shape = shapes[j];
+              for(auto dim: shape)
+                size = size * dim;
+              //considered only 1 input here
+              graph_desc.UpdateInputDesc(0, size * sizeof(::metawarenn::data_type));
+              inference_engine_->SetGraphDesc(graph_desc);
+            }
+          }
+        }
+
+        inference_engine_->SerializeToFile(dynamic_shape_, optimization_profile_);
+        execution_context_ = inference_engine_->CreateExecutionContext();
+      }
+
+      auto graph_desc = inference_engine_->GetGraphDesc();
+      std::string ip_name = graph_desc.input_desc[0].tensor_name;
+      std::string op_name = graph_desc.output_desc[0].tensor_name;
+      std::cout << "\n Ip_name : " << ip_name << "Size : " << graph_desc.input_desc[0].size;
+      std::cout << "\n Op_name : " << op_name << "size : " << graph_desc.output_desc[0].size;
+
+      execution_context_->CopyInputToDevice(graph_inputs[ip_name], graph_desc.input_desc[0].size);
+      execution_context_->Execute();
+      execution_context_->CopyOutputFromDevice(graph_outputs[op_name], graph_desc.output_desc[0].size);
     }
-
-    #if INFERENCE_ENGINE
-    auto graph_desc = inference_engine_->GetGraphDesc();
-    std::string ip_name = graph_desc.input_desc[0].tensor_name;
-    std::string op_name = graph_desc.output_desc[0].tensor_name;
-    std::cout << "\n Ip_name : " << ip_name << "Size : " << graph_desc.input_desc[0].size;
-    std::cout << "\n Op_name : " << op_name << "size : " << graph_desc.output_desc[0].size;
-
-    execution_context_->CopyInputToDevice(graph_inputs[ip_name], graph_desc.input_desc[0].size);
-    execution_context_->Execute();
-    execution_context_->CopyOutputFromDevice(graph_outputs[op_name], graph_desc.output_desc[0].size);
-    #endif
 
     // ******************************************* Call to invoke the local run function *****************************************
     //::metawarenn::convert_to_mwnn_format(*graph_, graph_inputs, graph_outputs, CHW_TO_HWC);
@@ -133,9 +216,13 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
  private:
   std::shared_ptr<::metawarenn::Graph> graph_;
   #if INFERENCE_ENGINE
-  std::shared_ptr<metawarenn::Builder> inference_builder_ = std::make_shared<metawarenn::Builder>();
-  std::shared_ptr<metawarenn::InferenceEngine> inference_engine_;
-  std::shared_ptr<metawarenn::ExecutionContext> execution_context_;
+  std::shared_ptr<::metawarenn::Builder> inference_builder_ = std::make_shared<metawarenn::Builder>();
+  std::shared_ptr<::metawarenn::InferenceEngine> inference_engine_;
+  std::shared_ptr<::metawarenn::ExecutionContext> execution_context_;
+  std::shared_ptr<metawarenn::OptimizationProfile> optimization_profile_ = nullptr;
+  std::shared_ptr<metawarenn::BuilderConfig> builder_config_;
+  std::unordered_map<std::string, std::unordered_map<size_t, std::pair<int64_t, int64_t>>> input_shape_range_;
+  bool dynamic_shape_;
   #endif
   bool quant_model = false;
   std::string quant_prev_scale;
@@ -1263,7 +1350,7 @@ void register_expand_dim(::metawarenn::optimizer::PassManager *manager, metaware
     if(g_n.get_op_type() == "Mul" || g_n.get_op_type() == "Add") {
       for (auto n_ip : g_n.get_inputs()) {
         if(g_t.get_name() == n_ip) {
-          std::cout << "\n Less Dimensiosna Name : " << g_t.get_name();
+          std::cout << "\n Less Dimensions Name : " << g_t.get_name();
           std::cout << "\t Dims : ";
           for (auto dim : g_t.get_dims())
             std::cout << dim << ",";
@@ -1330,9 +1417,9 @@ void register_expand_dim(::metawarenn::optimizer::PassManager *manager, metaware
         std::cout << "\n MetaWareNNCC : " << fr.get_name();
         manager.register_pass(fr);
       }
-    }*/
+    }
     ::metawarenn::optimizer::CalculateOffset co(graph_);
-    manager.register_pass(co);
+    manager.register_pass(co);*/
     manager.run_passes();
 
     auto graph_ip_names = graph_->get_graph_ip_names();
