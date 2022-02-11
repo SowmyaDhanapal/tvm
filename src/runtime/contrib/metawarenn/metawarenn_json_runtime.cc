@@ -92,11 +92,20 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           input_shape_range_[name][i] = std::make_pair(INT_MAX, INT_MIN);
         }
       }
+      metawarenn::Logger* logger = inference_builder_->GetLogger();
+      // Set Required LogLevel (DEBUG, INFO, WARNING, ERROR) in below line to change the Default INFO level
+      logger->SetLogLevel(metawarenn::LogLevel::DEBUG);
+
       builder_config_ = inference_builder_->CreateBuilderConfig();
+
+      inference_builder_->FillGraphDesc(graph_);
+
+      // Create ExecutableGraph from MWNNGraph
+      exe_graph_ = inference_builder_->CacheOrCreateExeGraph(graph_, graph_->get_name(), false);
       // dynamic_shape_ - yet to verify the flow
       if(!dynamic_shape_) {
-        inference_engine_ = inference_builder_->CreateInferenceEngine(graph_, builder_config_, false);
-        inference_engine_->SerializeToFile(dynamic_shape_, optimization_profile_);
+        inference_engine_ = inference_builder_->CreateInferenceEngine(exe_graph_, builder_config_, false);
+        inference_engine_->SerializeToFile();
         execution_context_ = inference_engine_->CreateExecutionContext();
       }
     }
@@ -114,7 +123,8 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           optimization_profile_ = inference_builder_->CreateOptimizationProfile();
         auto profile_path = inference_builder_->GetProfilePath(graph_->get_name(), &profile_file_exists);
         if(profile_file_exists)
-          input_shape_range_ = optimization_profile_->DeserializeProfileInfo(profile_path);
+          inference_builder_->DeserializeProfileInfo(profile_path, builder_config_);
+        builder_config_->PrintOptimizationProfileInfo();
       }
 
       std::unordered_map<std::string, float*> graph_inputs;
@@ -174,7 +184,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
       if (dynamic_shape_) {
         std::cout << "\n Creating Engine, Context for Dynamic Input shapes";
         builder_config_->AddOptimizationProfile(optimization_profile_);
-        inference_engine_ = inference_builder_->CreateInferenceEngine(graph_, builder_config_, update_engine);
+        inference_engine_ = inference_builder_->CreateInferenceEngine(exe_graph_, builder_config_, update_engine);
         auto graph_desc = inference_engine_->GetGraphDesc();
 
         for (size_t i = 0; i < input_nodes_.size(); ++i) {
@@ -194,7 +204,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           }
         }
 
-        inference_engine_->SerializeToFile(dynamic_shape_, optimization_profile_);
+        inference_engine_->SerializeToFile();
         execution_context_ = inference_engine_->CreateExecutionContext();
       }
 
@@ -217,6 +227,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
   std::shared_ptr<::metawarenn::Graph> graph_;
   #if INFERENCE_ENGINE
   std::shared_ptr<::metawarenn::Builder> inference_builder_ = std::make_shared<metawarenn::Builder>();
+  std::shared_ptr<metawarenn::ExecutableGraph> exe_graph_;
   std::shared_ptr<::metawarenn::InferenceEngine> inference_engine_;
   std::shared_ptr<::metawarenn::ExecutionContext> execution_context_;
   std::shared_ptr<metawarenn::OptimizationProfile> optimization_profile_ = nullptr;
