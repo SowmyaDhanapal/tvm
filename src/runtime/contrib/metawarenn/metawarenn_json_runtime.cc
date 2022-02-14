@@ -92,10 +92,10 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           input_shape_range_[name][i] = std::make_pair(INT_MAX, INT_MIN);
         }
       }
-      metawarenn::Logger* logger = inference_builder_->GetLogger();
+      logger = inference_builder_->GetLogger();
       // Set Required LogLevel (DEBUG, INFO, WARNING, ERROR) in below line to change the Default INFO level
       logger->SetLogLevel(metawarenn::LogLevel::DEBUG);
-
+      logger->Log(metawarenn::LogLevel::DEBUG, "In MetaWareNNJSONRuntime Init() - Graph Compilation!!!");
       builder_config_ = inference_builder_->CreateBuilderConfig();
 
       inference_builder_->FillGraphDesc(graph_);
@@ -107,12 +107,14 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         inference_engine_ = inference_builder_->CreateInferenceEngine(exe_graph_, builder_config_, false);
         inference_engine_->SerializeToFile();
         execution_context_ = inference_engine_->CreateExecutionContext();
+        execution_context_->PrintDeviceInformation();
       }
     }
   }
 
   void Run() override {
-    std::cout << "\n In MetaWareNN RUNN!!!";
+    logger->Log(metawarenn::LogLevel::DEBUG, "In MetaWareNNJSONRuntime Run() Function!!!");
+    int batchsize = 1;
     if(INFERENCE_ENGINE) {
 
       bool update_engine = false;
@@ -207,16 +209,34 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         inference_engine_->SerializeToFile();
         execution_context_ = inference_engine_->CreateExecutionContext();
       }
+      for(int i = 0; i < batchsize; i++) {
+        auto graph_desc = inference_engine_->GetGraphDesc();
+        std::vector<float*> ip_tensors(graph_inputs.size());
+        std::vector<uint32_t> ip_sizes(graph_inputs.size());
+        std::vector<float*> op_tensors(graph_outputs.size());
+        std::vector<uint32_t> op_sizes(graph_outputs.size());
 
-      auto graph_desc = inference_engine_->GetGraphDesc();
-      std::string ip_name = graph_desc.input_desc[0].tensor_name;
-      std::string op_name = graph_desc.output_desc[0].tensor_name;
-      std::cout << "\n Ip_name : " << ip_name << "Size : " << graph_desc.input_desc[0].size;
-      std::cout << "\n Op_name : " << op_name << "size : " << graph_desc.output_desc[0].size;
+        for(int ip = 0; ip < graph_inputs.size(); ip++) {
+          std::string ip_name = graph_desc.input_desc[ip].tensor_name;
+          std::cout << "\n Ip_name : " << ip_name << "Size : " << graph_desc.input_desc[ip].size;
+          int ip_index_offset = i * (graph_desc.input_desc[ip].size / sizeof(::metawarenn::data_type));
+          ip_tensors[ip] = graph_inputs[ip_name] + ip_index_offset;
+          ip_sizes[ip] = graph_desc.input_desc[ip].size;
+        }
 
-      execution_context_->CopyInputToDevice(graph_inputs[ip_name], graph_desc.input_desc[0].size);
-      execution_context_->Execute();
-      execution_context_->CopyOutputFromDevice(graph_outputs[op_name], graph_desc.output_desc[0].size);
+        for(int op = 0; op < graph_outputs.size(); op++) {
+          std::string op_name = graph_desc.output_desc[op].tensor_name;
+          std::cout << "\n Op_name : " << op_name << "Size : " << graph_desc.output_desc[op].size;
+          int op_index_offset = i * (graph_desc.output_desc[op].size / sizeof(::metawarenn::data_type));
+          op_tensors[op] = graph_outputs[op_name] + op_index_offset;
+          op_sizes[op] = graph_desc.output_desc[op].size;
+        }
+        logger->Log(metawarenn::LogLevel::DEBUG, " Preparing to Execute!!!  SubGraph Name : " + graph_->get_name());
+        execution_context_->CopyInputToDevice(ip_tensors, ip_sizes);
+        execution_context_->Execute();
+        execution_context_->CopyOutputFromDevice(op_tensors, op_sizes);
+        execution_context_->PrintDeviceInformation();
+      }
     }
 
     // ******************************************* Call to invoke the local run function *****************************************
@@ -233,6 +253,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
   std::shared_ptr<metawarenn::OptimizationProfile> optimization_profile_ = nullptr;
   std::shared_ptr<metawarenn::BuilderConfig> builder_config_;
   std::unordered_map<std::string, std::unordered_map<size_t, std::pair<int64_t, int64_t>>> input_shape_range_;
+  metawarenn::Logger* logger;
   bool dynamic_shape_;
   #endif
   bool quant_model = false;
