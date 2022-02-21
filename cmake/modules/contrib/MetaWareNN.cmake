@@ -24,8 +24,6 @@ if(USE_METAWARENN_CODEGEN STREQUAL "ON")
   file(GLOB METAWARENN_LIB_SRC src/runtime/contrib/metawarenn/metawarenn_lib/*.cc
     src/runtime/contrib/metawarenn/metawarenn_lib/op/*.cc
     src/runtime/contrib/metawarenn/metawarenn_lib/optimizer/*.cc
-    src/runtime/contrib/metawarenn/metawarenn_lib/kernels/*.cc
-    src/runtime/contrib/metawarenn/metawarenn_lib/kernels/helpers/*.cc
     src/runtime/contrib/metawarenn/metawarenn_lib/executable_network/*.cc
     src/runtime/contrib/metawarenn/metawarenn_lib/mwnnconvert/*.cc
     src/runtime/contrib/metawarenn/metawarenn_lib/mwnnconvert/mwnn_protobuf/cpp_wrapper/*.cc

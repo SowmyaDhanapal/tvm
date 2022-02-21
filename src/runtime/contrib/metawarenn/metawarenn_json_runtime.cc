@@ -35,7 +35,6 @@
 #include "../json/json_runtime.h"
 
 #include "metawarenn_lib/metawarenn_graph.h"
-#include "metawarenn_lib/metawarenn_utils.h"
 #include "metawarenn_lib/optimizer/pass_manager.h"
 #include "metawarenn_lib/mwnnconvert/mwnn_protobuf/cpp_wrapper/MWNN.pb.h"
 #include "metawarenn_lib/mwnnconvert/mwnn_to_onnx_proto.h"
@@ -79,9 +78,9 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     #endif
 
     if(!INFERENCE_ENGINE)
-      write_onnx_proto(graph_);
+      WriteONNXProto(graph_);
 
-    if(INFERENCE_ENGINE) {
+    #if INFERENCE_ENGINE
       dynamic_shape_ = false;
       auto ip_tensor = graph_->get_graph_ip_tensor()[0];
       auto dims = ip_tensor.get_dims();
@@ -109,14 +108,14 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         execution_context_ = inference_engine_->CreateExecutionContext();
         execution_context_->PrintDeviceInformation();
       }
-    }
+    #endif
   }
 
   void Run() override {
-    logger->Log(metawarenn::LogLevel::DEBUG, "In MetaWareNNJSONRuntime Run() Function!!!");
-    int batchsize = 1;
-    if(INFERENCE_ENGINE) {
 
+    int batchsize = 1;
+    #if INFERENCE_ENGINE
+      logger->Log(metawarenn::LogLevel::DEBUG, "In MetaWareNNJSONRuntime Run() Function!!!");
       bool update_engine = false;
       if(dynamic_shape_) {
         bool profile_file_exists = false;
@@ -132,62 +131,63 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
       std::unordered_map<std::string, float*> graph_inputs;
       std::unordered_map<std::string, float*> graph_outputs;
 
+      int ip_cnt = 0;
       for (auto g_ip : graph_->get_graph_ip_tensor()) {
         auto input_name = g_ip.get_name();
         std::cout << "\n Graph Input  : " << input_name;
-        for (size_t i = 0; i < input_nodes_.size(); ++i) {
-          auto nid = input_nodes_[i];
-          if (nodes_[nid].GetOpType() == "input") {
-            auto eid = EntryID(input_nodes_[i], 0);
-            float *input_buf = (float*)(data_entry_[eid]->data);
-            graph_inputs[input_name] = input_buf;
+        auto nid = input_nodes_[ip_cnt];
+        for(auto type: nodes_[nid].GetOpDataType()) {
+          std::cout << "\n type code: " << type.code;
+        }
+        if (nodes_[nid].GetOpType() == "input") {
+          auto eid = EntryID(input_nodes_[ip_cnt++], 0);
+          float *input_buf = (float*)(data_entry_[eid]->data);
+          graph_inputs[input_name] = input_buf;
 
-            if(dynamic_shape_) {
-              if(input_shape_range_.find(input_name) != input_shape_range_.end()) {
-                auto& ip_shape_range_ = input_shape_range_[input_name];
-                const auto& node = nodes_[nid];
-                auto shapes = node.GetOpShape();
-                for (size_t j = 0; j < shapes.size(); j++) {
-                  auto shape = shapes[j];
-                  for(int d = 0; d < shape.size(); d++) {
-                    std::cout << "\n Dimension : " << shape[d];
-                    if (ip_shape_range_.find(d) != ip_shape_range_.end()) {
-                      // Update Minimum Dimension
-                      if (shape[d] < ip_shape_range_[d].first) {
-                        ip_shape_range_[d].first = shape[d];
-                        update_engine = true;
-                      }
-                      // Update Maximum Dimension
-                      if(shape[d] > ip_shape_range_[d].second) {
-                        ip_shape_range_[d].second = shape[d];
-                        update_engine = true;
-                      }
+          if(dynamic_shape_) {
+            if(input_shape_range_.find(input_name) != input_shape_range_.end()) {
+              auto& ip_shape_range_ = input_shape_range_[input_name];
+              const auto& node = nodes_[nid];
+              auto shapes = node.GetOpShape();
+              for (size_t j = 0; j < shapes.size(); j++) {
+                auto shape = shapes[j];
+                for(int d = 0; d < shape.size(); d++) {
+                  std::cout << "\n Dimension : " << shape[d];
+                  if (ip_shape_range_.find(d) != ip_shape_range_.end()) {
+                    // Update Minimum Dimension
+                    if (shape[d] < ip_shape_range_[d].first) {
+                      ip_shape_range_[d].first = shape[d];
+                      update_engine = true;
+                    }
+                    // Update Maximum Dimension
+                    if(shape[d] > ip_shape_range_[d].second) {
+                      ip_shape_range_[d].second = shape[d];
+                      update_engine = true;
                     }
                   }
                 }
-                optimization_profile_->SetInputDimensions(input_name, ip_shape_range_);
               }
+              optimization_profile_->set_input_dimensions(input_name, ip_shape_range_);
             }
           }
         }
       }
+      int op_cnt = 0;
       for (auto g_op : graph_->get_graph_op_tensor()) {
         std::cout << "\n Graph Output  : " << g_op.get_name();
-        for (size_t i = 0; i < outputs_.size(); ++i) {
-          auto eid = EntryID(outputs_[i]);
-          size_t buffer_size = GetDataSize(*data_entry_[eid]);
-          std::cout << "\n Output eid : " << eid << " buffer_size : " << buffer_size;
-          float *output_buf = (float*)(data_entry_[eid]->data);
-          graph_outputs[g_op.get_name()] = output_buf;
-        }
+        auto eid = EntryID(outputs_[op_cnt++]);
+        size_t buffer_size = GetDataSize(*data_entry_[eid]);
+        std::cout << "\n Output eid : " << eid << " buffer_size : " << buffer_size;
+        float *output_buf = (float*)(data_entry_[eid]->data);
+        graph_outputs[g_op.get_name()] = output_buf;
       }
 
 
       if (dynamic_shape_) {
         std::cout << "\n Creating Engine, Context for Dynamic Input shapes";
-        builder_config_->AddOptimizationProfile(optimization_profile_);
+        builder_config_->add_optimization_profile(optimization_profile_);
         inference_engine_ = inference_builder_->CreateInferenceEngine(exe_graph_, builder_config_, update_engine);
-        auto graph_desc = inference_engine_->GetGraphDesc();
+        auto graph_desc = inference_engine_->get_graph_desc();
 
         for (size_t i = 0; i < input_nodes_.size(); ++i) {
           auto nid = input_nodes_[i];
@@ -200,8 +200,8 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
               for(auto dim: shape)
                 size = size * dim;
               //considered only 1 input here
-              graph_desc.UpdateInputDesc(0, size * sizeof(::metawarenn::data_type));
-              inference_engine_->SetGraphDesc(graph_desc);
+              graph_desc.UpdateInputDesc(0, size);
+              inference_engine_->set_graph_desc(graph_desc);
             }
           }
         }
@@ -210,7 +210,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         execution_context_ = inference_engine_->CreateExecutionContext();
       }
       for(int i = 0; i < batchsize; i++) {
-        auto graph_desc = inference_engine_->GetGraphDesc();
+        auto graph_desc = inference_engine_->get_graph_desc();
         std::vector<float*> ip_tensors(graph_inputs.size());
         std::vector<uint32_t> ip_sizes(graph_inputs.size());
         std::vector<float*> op_tensors(graph_outputs.size());
@@ -219,7 +219,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         for(int ip = 0; ip < graph_inputs.size(); ip++) {
           std::string ip_name = graph_desc.input_desc[ip].tensor_name;
           std::cout << "\n Ip_name : " << ip_name << "Size : " << graph_desc.input_desc[ip].size;
-          int ip_index_offset = i * (graph_desc.input_desc[ip].size / sizeof(::metawarenn::data_type));
+          int ip_index_offset = i * (graph_desc.input_desc[ip].size / graph_desc.GetDtypeSize(graph_desc.input_desc[ip].dtype));
           ip_tensors[ip] = graph_inputs[ip_name] + ip_index_offset;
           ip_sizes[ip] = graph_desc.input_desc[ip].size;
         }
@@ -227,7 +227,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         for(int op = 0; op < graph_outputs.size(); op++) {
           std::string op_name = graph_desc.output_desc[op].tensor_name;
           std::cout << "\n Op_name : " << op_name << "Size : " << graph_desc.output_desc[op].size;
-          int op_index_offset = i * (graph_desc.output_desc[op].size / sizeof(::metawarenn::data_type));
+          int op_index_offset = i * (graph_desc.output_desc[op].size / graph_desc.GetDtypeSize(graph_desc.output_desc[op].dtype));
           op_tensors[op] = graph_outputs[op_name] + op_index_offset;
           op_sizes[op] = graph_desc.output_desc[op].size;
         }
@@ -237,7 +237,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         execution_context_->CopyOutputFromDevice(op_tensors, op_sizes);
         execution_context_->PrintDeviceInformation();
       }
-    }
+    #endif
 
     // ******************************************* Call to invoke the local run function *****************************************
     //::metawarenn::convert_to_mwnn_format(*graph_, graph_inputs, graph_outputs, CHW_TO_HWC);
@@ -321,12 +321,12 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
   }
 
   template <class T1, class T2>
-  void CreateMWNNTensor(const DLTensor *data, std::string name, metawarenn::ElementType::element_type m_type, std::vector<int> dims) {
+  void CreateMWNNTensor(const DLTensor *data, std::string name, metawarenn::Element::ElementType m_type, std::vector<int> dims) {
     auto total_elements = std::accumulate(begin(dims), end(dims), 1, std::multiplies<int>());
     std::vector<T2> tensor_data = std::vector<T2>(((T1*)(data->data)), ((T1*)(data->data)) + total_elements);
     metawarenn::Tensor m_tensor(name, dims, m_type, tensor_data);
     graph_->set_graph_initializers(m_tensor);
-    graph_->initializer_names.insert(name);
+    graph_->initializer_names_.insert(name);
     std::cout << "\n Const Node : " << name << " Dims : ";
     for (auto di : dims)
         std::cout << di << ",";
@@ -335,7 +335,9 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
   // Build up the engine based on the input graph.
   void BuildMetaWareNNGraph() {
     graph_count++;
-    std::string subgraph_name = "MetaWareNN_" + std::to_string(graph_count);
+    char* bin_path = getenv("MODELNAME");
+    std::string subgraph_name = "MetaWareNN_" + std::to_string(graph_count)
+                               + "_" + std::string(bin_path);
     graph_ = std::make_shared<::metawarenn::Graph>();
     graph_->set_name(subgraph_name);
     auto tf_flag = std::getenv("TF_TVM_TO_ONNX");
@@ -375,7 +377,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
 
           if(static_cast<int>(dtypes[j].code) == kDLUInt) {
             quant_model = true;
-            m_type = metawarenn::ElementType::element_type::uint8_;
+            m_type = metawarenn::Element::ElementType::kUint8;
             std::string dequant_node_op_type = "DequantizeLinear";
             std::string dequant_node_name = dequant_node_op_type + "_" + ip_name;
             std::vector<std::string> dequant_node_inputs;
@@ -384,15 +386,15 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
 
             std::string scale_name = dequant_node_name + std::string("_scale");
             std::vector<float> tensor_vec_scale = {0.0078125};
-            ::metawarenn::Tensor scale_tensor(scale_name, std::vector<int>({tensor_vec_scale.size()}), metawarenn::ElementType::element_type::float_, tensor_vec_scale);
+            ::metawarenn::Tensor scale_tensor(scale_name, std::vector<int>({tensor_vec_scale.size()}), metawarenn::Element::ElementType::kFloat, tensor_vec_scale);
             graph_->set_graph_initializers(scale_tensor);
-            graph_->initializer_names.insert(scale_name);
+            graph_->initializer_names_.insert(scale_name);
 
             std::string zp_name = dequant_node_name + std::string("_zero_point");
             std::vector<int32_t> tensor_vec_zp = {128};
-            ::metawarenn::Tensor zp_tensor(zp_name, std::vector<int>({tensor_vec_zp.size()}), metawarenn::ElementType::element_type::uint8_, tensor_vec_zp);
+            ::metawarenn::Tensor zp_tensor(zp_name, std::vector<int>({tensor_vec_zp.size()}), metawarenn::Element::ElementType::kUint8, tensor_vec_zp);
             graph_->set_graph_initializers(zp_tensor);
-            graph_->initializer_names.insert(zp_name);
+            graph_->initializer_names_.insert(zp_name);
 
             dequant_node_inputs.push_back(ip_name);
             dequant_node_inputs.push_back(scale_name);//Scale
@@ -414,17 +416,17 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         std::string name = "node_" + std::to_string(nid);
         const DLTensor* data = data_entry_[eid];
         std::vector<int> dims(data->shape, data->shape + data->ndim);
-        metawarenn::ElementType::element_type m_type;
+        metawarenn::Element::ElementType m_type;
         if(static_cast<int>(data->dtype.code) == kDLUInt) {
-          m_type = metawarenn::ElementType::element_type::uint8_;
+          m_type = metawarenn::Element::ElementType::kUint8;
           CreateMWNNTensor<uint8_t,int32_t>(data, name, m_type, dims);
         }
         else if(static_cast<int>(data->dtype.code) == kDLFloat) {
-          m_type = metawarenn::ElementType::element_type::float_;
+          m_type = metawarenn::Element::ElementType::kFloat;
           CreateMWNNTensor<float,float>(data, name, m_type, dims);
         }
         else if(static_cast<int>(data->dtype.code) == kDLInt) {
-          m_type = metawarenn::ElementType::element_type::int32_;
+          m_type = metawarenn::Element::ElementType::kInt32;
           CreateMWNNTensor<int32_t,int32_t>(data, name, m_type, dims);
         }
         else{
@@ -670,15 +672,15 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           auto max = node.GetAttr<std::vector<std::string>>("a_max");
 
           std::string clip_ip_min = node_name + "_min";
-          metawarenn::Tensor min_tensor(clip_ip_min, std::vector<int>({1}), metawarenn::ElementType::element_type::float_, std::vector<float>({std::stof(min[0])}));
+          metawarenn::Tensor min_tensor(clip_ip_min, std::vector<int>({1}), metawarenn::Element::ElementType::kFloat, std::vector<float>({std::stof(min[0])}));
           graph_->set_graph_initializers(min_tensor);
-          graph_->initializer_names.insert(clip_ip_min);
+          graph_->initializer_names_.insert(clip_ip_min);
           node_inputs.emplace_back(clip_ip_min);
 
           std::string clip_ip_max = node_name + "_max";
-          metawarenn::Tensor max_tensor(clip_ip_max, std::vector<int>({1}), metawarenn::ElementType::element_type::float_, std::vector<float>({std::stof(max[0])}));
+          metawarenn::Tensor max_tensor(clip_ip_max, std::vector<int>({1}), metawarenn::Element::ElementType::kFloat, std::vector<float>({std::stof(max[0])}));
           graph_->set_graph_initializers(max_tensor);
-          graph_->initializer_names.insert(clip_ip_max);
+          graph_->initializer_names_.insert(clip_ip_max);
           node_inputs.emplace_back(clip_ip_max);
         }
         else if (node.GetOpName() == "squeeze") {
@@ -694,9 +696,9 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
            }
 
           std::string axes_ip_name = node_name + "axes";
-          metawarenn::Tensor axes_tensor(axes_ip_name, std::vector<int>({tensor_axes.size()}), metawarenn::ElementType::element_type::int64_, tensor_axes);
+          metawarenn::Tensor axes_tensor(axes_ip_name, std::vector<int>({tensor_axes.size()}), metawarenn::Element::ElementType::kInt64, tensor_axes);
           graph_->set_graph_initializers(axes_tensor);
-          graph_->initializer_names.insert(axes_ip_name);
+          graph_->initializer_names_.insert(axes_ip_name);
           node_inputs.emplace_back(axes_ip_name);;
         }
         else if (node.GetOpName() == "transpose") {
@@ -784,13 +786,13 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
 
           metawarenn::Attribute attr_method("mode", method[0]);
           node_attributes.emplace_back(attr_method);
-          metawarenn::Tensor roi_tensor(node_name + "_roi", std::vector<int>({0}), metawarenn::ElementType::element_type::float_, std::vector<float>{});
+          metawarenn::Tensor roi_tensor(node_name + "_roi", std::vector<int>({0}), metawarenn::Element::ElementType::kFloat, std::vector<float>{});
           graph_->set_graph_initializers(roi_tensor);
-          graph_->initializer_names.insert(roi_tensor.get_name());
+          graph_->initializer_names_.insert(roi_tensor.get_name());
           node_inputs.emplace_back(roi_tensor.get_name());
-          metawarenn::Tensor scale_tensor(node_name + "_scale", std::vector<int>({4}), metawarenn::ElementType::element_type::float_, scales);
+          metawarenn::Tensor scale_tensor(node_name + "_scale", std::vector<int>({4}), metawarenn::Element::ElementType::kFloat, scales);
           graph_->set_graph_initializers(scale_tensor);
-          graph_->initializer_names.insert(scale_tensor.get_name());
+          graph_->initializer_names_.insert(scale_tensor.get_name());
           node_inputs.emplace_back(scale_tensor.get_name());
         }
         else if (node.GetOpName() == "sum") {
@@ -849,9 +851,9 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
             attr_axis = metawarenn::Attribute("axis", (int64_t)std::stoi(axis[0])-2); //To handle the layout from HWC(TFLite) to CHW(ONNX)
           else {
             attr_axis = metawarenn::Attribute("axis", (int64_t)std::stoi(axis[0]));
-            metawarenn::Tensor split_tensor(node_name + "_split", std::vector<int>{num_splits}, metawarenn::ElementType::element_type::int64_, split);
+            metawarenn::Tensor split_tensor(node_name + "_split", std::vector<int>{num_splits}, metawarenn::Element::ElementType::kInt64, split);
             graph_->set_graph_initializers(split_tensor);
-            graph_->initializer_names.insert(split_tensor.get_name());
+            graph_->initializer_names_.insert(split_tensor.get_name());
             node_inputs.emplace_back(split_tensor.get_name());
             node_attributes.emplace_back(attr_axis);
           }
@@ -877,15 +879,15 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           }
 
           std::string begin_ip_name = node_name + "_ip_begin";
-          metawarenn::Tensor begin_tensor(begin_ip_name, std::vector<int>({tensor_begin.size()}), metawarenn::ElementType::element_type::int64_, tensor_begin);
+          metawarenn::Tensor begin_tensor(begin_ip_name, std::vector<int>({tensor_begin.size()}), metawarenn::Element::ElementType::kInt64, tensor_begin);
           graph_->set_graph_initializers(begin_tensor);
-          graph_->initializer_names.insert(begin_ip_name);
+          graph_->initializer_names_.insert(begin_ip_name);
           node_inputs.emplace_back(begin_ip_name);
 
           std::string end_ip_name = node_name + "_ip_end";
-          metawarenn::Tensor end_tensor(end_ip_name, std::vector<int>({tensor_end.size()}), metawarenn::ElementType::element_type::int64_, tensor_end);
+          metawarenn::Tensor end_tensor(end_ip_name, std::vector<int>({tensor_end.size()}), metawarenn::Element::ElementType::kInt64, tensor_end);
           graph_->set_graph_initializers(end_tensor);
-          graph_->initializer_names.insert(end_ip_name);
+          graph_->initializer_names_.insert(end_ip_name);
           node_inputs.emplace_back(end_ip_name);
         }
         else if (node.GetOpName() == "nn.softmax") {
@@ -911,9 +913,9 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
             for(int i=0; i<new_shape.size(); i++)
               tensor_vec[i] = std::stoi(new_shape[i]);
           }
-          metawarenn::Tensor reshape_tensor(reshape_ip_name, std::vector<int>({tensor_vec.size()}), metawarenn::ElementType::element_type::int64_, tensor_vec);
+          metawarenn::Tensor reshape_tensor(reshape_ip_name, std::vector<int>({tensor_vec.size()}), metawarenn::Element::ElementType::kInt64, tensor_vec);
           graph_->set_graph_initializers(reshape_tensor);
-          graph_->initializer_names.insert(reshape_ip_name);
+          graph_->initializer_names_.insert(reshape_ip_name);
           node_inputs.emplace_back(reshape_ip_name);
 
           std::string scale_name, zp_name;
@@ -967,17 +969,17 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           metawarenn::Attribute attr_rounding_method("nearest_mode", rounding_method[0]);
           node_attributes.emplace_back(attr_rounding_method);
           // ROI, Scale is not available in node attribute. Adding empty vector to maintain the tensor order in ONNX
-          metawarenn::Tensor roi_tensor(node_name + "_roi", std::vector<int>({0}), metawarenn::ElementType::element_type::float_, std::vector<float>{});
+          metawarenn::Tensor roi_tensor(node_name + "_roi", std::vector<int>({0}), metawarenn::Element::ElementType::kFloat, std::vector<float>{});
           graph_->set_graph_initializers(roi_tensor);
-          graph_->initializer_names.insert(roi_tensor.get_name());
+          graph_->initializer_names_.insert(roi_tensor.get_name());
           node_inputs.emplace_back(roi_tensor.get_name());
-          metawarenn::Tensor scale_tensor(node_name + "_scale", std::vector<int>({0}), metawarenn::ElementType::element_type::float_, std::vector<float>{});
+          metawarenn::Tensor scale_tensor(node_name + "_scale", std::vector<int>({0}), metawarenn::Element::ElementType::kFloat, std::vector<float>{});
           graph_->set_graph_initializers(scale_tensor);
-          graph_->initializer_names.insert(scale_tensor.get_name());
+          graph_->initializer_names_.insert(scale_tensor.get_name());
           node_inputs.emplace_back(scale_tensor.get_name());
-          metawarenn::Tensor size_tensor(node_name + "_size", std::vector<int>({size_vec.size()}), metawarenn::ElementType::element_type::int64_, size_vec);
+          metawarenn::Tensor size_tensor(node_name + "_size", std::vector<int>({size_vec.size()}), metawarenn::Element::ElementType::kInt64, size_vec);
           graph_->set_graph_initializers(size_tensor);
-          graph_->initializer_names.insert(size_tensor.get_name());
+          graph_->initializer_names_.insert(size_tensor.get_name());
           node_inputs.emplace_back(size_tensor.get_name());
           }
         else if (node.GetOpName() == "image.crop_and_resize") {
@@ -1006,9 +1008,9 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           std::vector<int64_t> tensor_vec;
           for(auto i = padding.begin(); i != padding.end(); i++)
             tensor_vec.push_back(std::stoi(*i));
-          metawarenn::Tensor reshape_tensor(pad_ip_name, dims, metawarenn::ElementType::element_type::int64_, tensor_vec);
+          metawarenn::Tensor reshape_tensor(pad_ip_name, dims, metawarenn::Element::ElementType::kInt64, tensor_vec);
           graph_->set_graph_initializers(reshape_tensor);
-          graph_->initializer_names.insert(pad_ip_name);
+          graph_->initializer_names_.insert(pad_ip_name);
           node_inputs[1] = pad_ip_name;
         }
         else if (node.GetOpName() == "sigmoid") {
@@ -1029,7 +1031,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         }
         else if(node.GetOpName() == "qnn.conv2d") {
           float ip_scale=0.0, w_scale=0.0;
-          graph_->update_initializer_tensor_type(node_inputs[3], metawarenn::ElementType::element_type::uint8_);
+          graph_->update_initializer_tensor_type(node_inputs[3], metawarenn::Element::ElementType::kUint8);
           for(auto g_t : graph_->get_graph_initializers()) {
             if(g_t.get_name() == node_inputs[4]) { //Input Scale
               ip_scale = g_t.get_tensor<float>(g_t.get_type())[0];
@@ -1056,19 +1058,19 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
               if(k_dims.size() == 4 && g_t.get_name() == node_inputs[1]) {
                 std::vector<int> new_dims = {k_dims[0], k_dims[1], k_dims[2]/group, k_dims[3]*group};
                 auto type = g_t.get_type();
-                if(type == (int)metawarenn::ElementType::element_type::float_) {
+                if(type == (int)metawarenn::Element::ElementType::kFloat) {
                   std::vector<float> data = g_t.get_tensor<float>(type);
                   graph_->update_initializer_tensors(g_t.get_name(), new_dims, data, type);
                 }
-                else if(type == (int)metawarenn::ElementType::element_type::int32_ ||
-                  type == (int)metawarenn::ElementType::element_type::int8_ ||
-                  type == (int)metawarenn::ElementType::element_type::int16_ ||
-                  type == (int)metawarenn::ElementType::element_type::uint8_ ||
-                  type == (int)metawarenn::ElementType::element_type::uint16_) {
+                else if(type == (int)metawarenn::Element::ElementType::kInt32 ||
+                  type == (int)metawarenn::Element::ElementType::kInt8 ||
+                  type == (int)metawarenn::Element::ElementType::kInt16 ||
+                  type == (int)metawarenn::Element::ElementType::kUint8 ||
+                  type == (int)metawarenn::Element::ElementType::kUint16) {
                   std::vector<int32_t> data = g_t.get_tensor<int32_t>(type);
                   graph_->update_initializer_tensors(g_t.get_name(), new_dims, data, type);
                   }
-                else if(type == (int)metawarenn::ElementType::element_type::int64_) {
+                else if(type == (int)metawarenn::Element::ElementType::kInt64) {
                   std::vector<int64_t> data = g_t.get_tensor<int64_t>(type);
                   graph_->update_initializer_tensors(g_t.get_name(), new_dims, data, type);
                 }
@@ -1119,15 +1121,15 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
 
                 std::string scale_name = ip_name + std::string("_scale");
                 std::vector<float> tensor_vec_scale = {ip_scale*w_scale};
-                ::metawarenn::Tensor scale_tensor(scale_name, std::vector<int>({tensor_vec_scale.size()}), ::metawarenn::ElementType::element_type::float_, tensor_vec_scale);
+                ::metawarenn::Tensor scale_tensor(scale_name, std::vector<int>({tensor_vec_scale.size()}), ::metawarenn::Element::ElementType::kFloat, tensor_vec_scale);
                 graph_->set_graph_initializers(scale_tensor);
-                graph_->initializer_names.insert(scale_name);
+                graph_->initializer_names_.insert(scale_name);
 
                 std::string zp_name = ip_name + std::string("_zero_point");
                 std::vector<int32_t> tensor_vec_zp = {0};
-                ::metawarenn::Tensor zp_tensor(zp_name, std::vector<int>({tensor_vec_zp.size()}), ::metawarenn::ElementType::element_type::int32_, tensor_vec_zp);
+                ::metawarenn::Tensor zp_tensor(zp_name, std::vector<int>({tensor_vec_zp.size()}), ::metawarenn::Element::ElementType::kInt32, tensor_vec_zp);
                 graph_->set_graph_initializers(zp_tensor);
-                graph_->initializer_names.insert(zp_name);
+                graph_->initializer_names_.insert(zp_name);
 
                 dequant_node_inputs.push_back(ip_name);
                 dequant_node_inputs.push_back(scale_name);//Bias Scale
@@ -1147,7 +1149,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         }
         else if (node.GetOpName() ==  "qnn.requantize") {
           //https://github.com/apache/tvm/blob/26281792e92ae24ec7a14b11e8df8fbacf9c4882/python/tvm/relay/frontend/tflite.py#L2196
-          graph_->update_initializer_tensor_type(node_inputs[4], metawarenn::ElementType::element_type::uint8_);//Update ZeroPoint Datatype
+          graph_->update_initializer_tensor_type(node_inputs[4], metawarenn::Element::ElementType::kUint8);//Update ZeroPoint Datatype
           CreateQDQNodes(node_inputs[0], node_outputs[0], node_inputs[3], node_inputs[4]);
           node_inputs.erase(node_inputs.begin()+1, node_inputs.begin()+5);
           continue;
@@ -1167,7 +1169,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           if(last_qdq_node == "dequant") {
             node_op_type = "QuantizeLinear";
             node_name = node_op_type + std::to_string(layer_count++);
-            graph_->update_initializer_tensor_type(node_inputs[2], metawarenn::ElementType::element_type::uint8_);
+            graph_->update_initializer_tensor_type(node_inputs[2], metawarenn::Element::ElementType::kUint8);
             last_qdq_node = "quant";
           }
           else {
@@ -1179,7 +1181,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           //https://github.com/apache/tvm/blob/26281792e92ae24ec7a14b11e8df8fbacf9c4882/python/tvm/relay/frontend/tflite.py#L1270
           node_op_type = "Add";
           node_name = node_op_type + std::to_string(layer_count++);
-          graph_->update_initializer_tensor_type(node_inputs[7], metawarenn::ElementType::element_type::uint8_);
+          graph_->update_initializer_tensor_type(node_inputs[7], metawarenn::Element::ElementType::kUint8);
 
           std::string dequant_node_op_type = "DequantizeLinear";
           std::string dequant_node_name = dequant_node_op_type + "_" + node_outputs[0];
@@ -1203,7 +1205,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           std::string op_scale_name = node_inputs[total_ips-2];
           std::string op_zp_name = node_inputs[total_ips-1];
           int num_inputs = (total_ips - 2) / 3;
-          graph_->update_initializer_tensor_type(node_inputs[total_ips-1], metawarenn::ElementType::element_type::uint8_);
+          graph_->update_initializer_tensor_type(node_inputs[total_ips-1], metawarenn::Element::ElementType::kUint8);
           std::string dequant_node_op_type = "DequantizeLinear";
           std::string dequant_node_name = dequant_node_op_type + "_" + node_outputs[0];
           CreateQDQNodes(node_outputs[0], dequant_node_name, op_scale_name, op_zp_name);
@@ -1214,7 +1216,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           //https://github.com/apache/tvm/blob/26281792e92ae24ec7a14b11e8df8fbacf9c4882/python/tvm/relay/frontend/tflite.py#L1902
 
           float ip_scale=0.0, w_scale=0.0;
-          graph_->update_initializer_tensor_type(node_inputs[3], metawarenn::ElementType::element_type::uint8_);
+          graph_->update_initializer_tensor_type(node_inputs[3], metawarenn::Element::ElementType::kUint8);
           for(auto g_t : graph_->get_graph_initializers()) {
             if(g_t.get_name() == node_inputs[4]) { //Input Scale
               ip_scale = g_t.get_tensor<float>(g_t.get_type())[0];
@@ -1259,15 +1261,15 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
 
                 std::string scale_name = ip_name + std::string("_scale");
                 std::vector<float> tensor_vec_scale = {ip_scale*w_scale};
-                ::metawarenn::Tensor scale_tensor(scale_name, std::vector<int>({tensor_vec_scale.size()}), ::metawarenn::ElementType::element_type::float_, tensor_vec_scale);
+                ::metawarenn::Tensor scale_tensor(scale_name, std::vector<int>({tensor_vec_scale.size()}), ::metawarenn::Element::ElementType::kFloat, tensor_vec_scale);
                 graph_->set_graph_initializers(scale_tensor);
-                graph_->initializer_names.insert(scale_name);
+                graph_->initializer_names_.insert(scale_name);
 
                 std::string zp_name = ip_name + std::string("_zero_point");
                 std::vector<int32_t> tensor_vec_zp = {0};
-                ::metawarenn::Tensor zp_tensor(zp_name, std::vector<int>({tensor_vec_zp.size()}), ::metawarenn::ElementType::element_type::int32_, tensor_vec_zp);
+                ::metawarenn::Tensor zp_tensor(zp_name, std::vector<int>({tensor_vec_zp.size()}), ::metawarenn::Element::ElementType::kInt32, tensor_vec_zp);
                 graph_->set_graph_initializers(zp_tensor);
-                graph_->initializer_names.insert(zp_name);
+                graph_->initializer_names_.insert(zp_name);
 
                 dequant_node_inputs.push_back(ip_name);
                 dequant_node_inputs.push_back(scale_name);//Bias Scale
@@ -1335,7 +1337,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     else {
         if(static_cast<int>(dtypes[0].code) == kDLUInt) {
           if(last_qdq_node != "quant") {
-            m_type = metawarenn::ElementType::element_type::uint8_;
+            m_type = metawarenn::Element::ElementType::kUint8;
             if(quant_ip_mapper.count(op_name) != 0)
               op_name = quant_ip_mapper[op_name];
 
@@ -1353,10 +1355,11 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
             op_name = quant_node_name;
             last_qdq_node = "quant";
           }
-          else
-           m_type = metawarenn::ElementType::element_type::uint8_;
+          else {
+           m_type = metawarenn::Element::ElementType::kUint8;
            if(quant_ip_mapper.count(op_name) != 0)
              op_name = quant_ip_mapper[op_name];
+          }
         }
       metawarenn::Tensor m_op_tensor(op_name, m_type, dims);
       graph_->set_graph_op_tensor(m_op_tensor);
@@ -1364,16 +1367,16 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     }
   }
 
-  static metawarenn::ElementType::element_type get_mwnn_type_tvm(uint8_t tvm_type) {
+  static metawarenn::Element::ElementType get_mwnn_type_tvm(uint8_t tvm_type) {
       switch (tvm_type) {
           case kDLFloat:
-              return metawarenn::ElementType::element_type::float_;
+              return metawarenn::Element::ElementType::kFloat;
           case kDLInt:
-              return metawarenn::ElementType::element_type::int32_;
+              return metawarenn::Element::ElementType::kInt32;
           case kDLUInt:
-              return metawarenn::ElementType::element_type::uint32_;
+              return metawarenn::Element::ElementType::kUint32;
           default:
-              return metawarenn::ElementType::element_type::dynamic_;
+              return metawarenn::Element::ElementType::kDynamic;
       }
   }
 
@@ -1457,7 +1460,7 @@ void register_expand_dim(::metawarenn::optimizer::PassManager *manager, metaware
     auto graph_ip_names = graph_->get_graph_ip_names();
     for (auto g_n : graph_->get_graph_nodes()) {
       for (auto n_ip : g_n.get_inputs()) {
-        if(!(graph_->initializer_names.count(n_ip)) && !(std::count(graph_ip_names.begin(), graph_ip_names.end(), n_ip))) {
+        if(!(graph_->initializer_names_.count(n_ip)) && !(std::count(graph_ip_names.begin(), graph_ip_names.end(), n_ip))) {
           if (graph_->get_node_producers().count(n_ip)) {
             graph_->set_node_consumer(n_ip, g_n.get_name());
           }
