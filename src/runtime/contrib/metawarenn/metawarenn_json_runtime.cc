@@ -219,7 +219,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         for(int ip = 0; ip < graph_inputs.size(); ip++) {
           std::string ip_name = graph_desc.input_desc[ip].tensor_name;
           std::cout << "\n Ip_name : " << ip_name << "Size : " << graph_desc.input_desc[ip].size;
-          int ip_index_offset = i * (graph_desc.input_desc[ip].size / graph_desc.GetDtypeSize(graph_desc.input_desc[ip].dtype));
+          int ip_index_offset = i * (graph_desc.input_desc[ip].size / graph_desc.GetDTypeSize(graph_desc.input_desc[ip].dtype));
           ip_tensors[ip] = graph_inputs[ip_name] + ip_index_offset;
           ip_sizes[ip] = graph_desc.input_desc[ip].size;
         }
@@ -227,7 +227,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         for(int op = 0; op < graph_outputs.size(); op++) {
           std::string op_name = graph_desc.output_desc[op].tensor_name;
           std::cout << "\n Op_name : " << op_name << "Size : " << graph_desc.output_desc[op].size;
-          int op_index_offset = i * (graph_desc.output_desc[op].size / graph_desc.GetDtypeSize(graph_desc.output_desc[op].dtype));
+          int op_index_offset = i * (graph_desc.output_desc[op].size / graph_desc.GetDTypeSize(graph_desc.output_desc[op].dtype));
           op_tensors[op] = graph_outputs[op_name] + op_index_offset;
           op_sizes[op] = graph_desc.output_desc[op].size;
         }
