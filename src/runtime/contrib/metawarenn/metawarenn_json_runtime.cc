@@ -93,8 +93,8 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
       }
       logger = inference_builder_->GetLogger();
       // Set Required LogLevel (DEBUG, INFO, WARNING, ERROR) in below line to change the Default INFO level
-      logger->SetLogLevel(metawarenn::LogLevel::DEBUG);
-      logger->Log(metawarenn::LogLevel::DEBUG, "In MetaWareNNJSONRuntime Init() - Graph Compilation!!!");
+      logger->set_log_level(metawarenn::LogLevel::kDebug);
+      logger->Log(metawarenn::LogLevel::kDebug, "In MetaWareNNJSONRuntime Init() - Graph Compilation!!!");
       builder_config_ = inference_builder_->CreateBuilderConfig();
 
       inference_builder_->FillGraphDesc(graph_);
@@ -115,7 +115,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
 
     int batchsize = 1;
     #if INFERENCE_ENGINE
-      logger->Log(metawarenn::LogLevel::DEBUG, "In MetaWareNNJSONRuntime Run() Function!!!");
+      logger->Log(metawarenn::LogLevel::kDebug, "In MetaWareNNJSONRuntime Run() Function!!!");
       bool update_engine = false;
       if(dynamic_shape_) {
         bool profile_file_exists = false;
@@ -231,7 +231,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           op_tensors[op] = graph_outputs[op_name] + op_index_offset;
           op_sizes[op] = graph_desc.output_desc[op].size;
         }
-        logger->Log(metawarenn::LogLevel::DEBUG, " Preparing to Execute!!!  SubGraph Name : " + graph_->get_name());
+        logger->Log(metawarenn::LogLevel::kDebug, " Preparing to Execute!!!  SubGraph Name : " + graph_->get_name());
         execution_context_->CopyInputToDevice(ip_tensors, ip_sizes);
         execution_context_->Execute();
         execution_context_->CopyOutputFromDevice(op_tensors, op_sizes);
@@ -1390,7 +1390,7 @@ void register_expand_dim(::metawarenn::optimizer::PassManager *manager, metaware
           for (auto dim : g_t.get_dims())
             std::cout << dim << ",";
           ::metawarenn::optimizer::ExpandDimension ed(graph_, g_t);
-          manager->register_pass(ed);
+          manager->RegisterPass(ed);
         }
       }
     }
@@ -1411,7 +1411,7 @@ void register_expand_dim(::metawarenn::optimizer::PassManager *manager, metaware
           for (auto dim : g_t.get_dims())
             std::cout << dim << ",";
           ::metawarenn::optimizer::ConvertLayout cl(graph_, g_t, CHW_TO_HWC, HWC_TO_CHW, tf_tvm_to_onnx, true);
-          manager.register_pass(cl);
+          manager.RegisterPass(cl);
         }
         else {
           register_expand_dim(&manager, g_t);
@@ -1424,7 +1424,7 @@ void register_expand_dim(::metawarenn::optimizer::PassManager *manager, metaware
           for (auto dim : g_t.get_dims())
             std::cout << dim << ",";
           ::metawarenn::optimizer::ConvertLayout cl(graph_, g_t, CHW_TO_HWC, HWC_TO_CHW, tf_tvm_to_onnx, false);
-          manager.register_pass(cl);
+          manager.RegisterPass(cl);
         }
       }
     }
@@ -1440,22 +1440,22 @@ void register_expand_dim(::metawarenn::optimizer::PassManager *manager, metaware
       if(g_n.get_op_type() == "Reshape") {
         ::metawarenn::optimizer::RemoveReshape rr(graph_, g_n);
         std::cout << "\n MetaWareNNCC : " << rr.get_name();
-        manager.register_pass(rr);
+        manager.RegisterPass(rr);
       }
       else if(g_n.get_op_type() == "BatchNormalization") {
         ::metawarenn::optimizer::FuseBatchNorm fbn(graph_, g_n);
         std::cout << "\n MetaWareNNCC : " << fbn.get_name();
-        manager.register_pass(fbn);
+        manager.RegisterPass(fbn);
       }
       else if(g_n.get_op_type() == "Relu") {
         ::metawarenn::optimizer::FuseRelu fr(graph_, g_n);
         std::cout << "\n MetaWareNNCC : " << fr.get_name();
-        manager.register_pass(fr);
+        manager.RegisterPass(fr);
       }
     }
     ::metawarenn::optimizer::CalculateOffset co(graph_);
-    manager.register_pass(co);*/
-    manager.run_passes();
+    manager.RegisterPass(co);*/
+    manager.RunPasses();
 
     auto graph_ip_names = graph_->get_graph_ip_names();
     for (auto g_n : graph_->get_graph_nodes()) {
