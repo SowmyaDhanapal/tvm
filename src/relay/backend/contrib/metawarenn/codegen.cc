@@ -48,16 +48,17 @@ class MetaWareNNJSONSerializer : public backend::contrib::JSONSerializer {
   using JSONGraphNodeEntry = tvm::runtime::json::JSONGraphNodeEntry;
 
  public:
-  MetaWareNNJSONSerializer(const std::string& symbol, const Expr& expr) : JSONSerializer(symbol, expr) {}
+  MetaWareNNJSONSerializer(const std::string& symbol, const Expr& expr) : 
+      JSONSerializer(symbol, expr) {}
 
   std::vector<JSONGraphNodeEntry> VisitExpr_(const CallNode* cn) override {
     Expr expr = GetRef<Expr>(cn);
     std::string name;
     if (const auto* op_node = cn->op.as<OpNode>()) {
       name = op_node->name;
-    }
-    else {
-      LOG(FATAL) << "MetaWareNN JSON runtime does not support calls to " << cn->op->GetTypeKey();
+    } else {
+      LOG(FATAL) << "MetaWareNN JSON runtime does not support calls to " << 
+                    cn->op->GetTypeKey();
     }
 
     std::vector<JSONGraphNodeEntry> inputs;
@@ -71,14 +72,14 @@ class MetaWareNNJSONSerializer : public backend::contrib::JSONSerializer {
                                                 inputs, 1 /* num_outputs_ */);
     if (name == "nn.pad") {
       SetPadNodeAttribute(node, cn);
-    }
-    else {
+    } else {
       SetCallNodeAttribute(node, cn);
     }
     return AddNode(node, GetRef<Expr>(cn));
   }
 
-  void SetPadNodeAttribute(std::shared_ptr<JSONGraphNode> node, const CallNode* cn) {
+  void SetPadNodeAttribute(std::shared_ptr<JSONGraphNode> node, 
+                           const CallNode* cn) {
     const auto* pad_attr = cn->attrs.as<PadAttrs>();
     ICHECK(pad_attr);
     auto p = pad_attr->pad_width;
@@ -93,21 +94,30 @@ class MetaWareNNJSONSerializer : public backend::contrib::JSONSerializer {
     auto tf_flag = std::getenv("TF_TVM_TO_ONNX");
     bool tf_tvm_to_onnx = atoi(tf_flag);
 
-    if(tf_tvm_to_onnx) {
-    NDimValue = {std::to_string(p[0][0].as<IntImmNode>()->value), std::to_string(p[0][1].as<IntImmNode>()->value)};
-    HDimValue = {std::to_string(p[1][0].as<IntImmNode>()->value), std::to_string(p[1][1].as<IntImmNode>()->value)};
-    WDimValue = {std::to_string(p[2][0].as<IntImmNode>()->value), std::to_string(p[2][1].as<IntImmNode>()->value)};
-    CDimValue = {std::to_string(p[3][0].as<IntImmNode>()->value), std::to_string(p[3][1].as<IntImmNode>()->value)};
+    if (tf_tvm_to_onnx) {
+    NDimValue = {std::to_string(p[0][0].as<IntImmNode>()->value), 
+                 std::to_string(p[0][1].as<IntImmNode>()->value)};
+    HDimValue = {std::to_string(p[1][0].as<IntImmNode>()->value), 
+                 std::to_string(p[1][1].as<IntImmNode>()->value)};
+    WDimValue = {std::to_string(p[2][0].as<IntImmNode>()->value), 
+                 std::to_string(p[2][1].as<IntImmNode>()->value)};
+    CDimValue = {std::to_string(p[3][0].as<IntImmNode>()->value), 
+                 std::to_string(p[3][1].as<IntImmNode>()->value)};
+    } else {
+    NDimValue = {std::to_string(p[0][0].as<IntImmNode>()->value), 
+                 std::to_string(p[0][1].as<IntImmNode>()->value)};
+    CDimValue = {std::to_string(p[1][0].as<IntImmNode>()->value), 
+                 std::to_string(p[1][1].as<IntImmNode>()->value)};
+    HDimValue = {std::to_string(p[2][0].as<IntImmNode>()->value), 
+                 std::to_string(p[2][1].as<IntImmNode>()->value)};
+    WDimValue = {std::to_string(p[3][0].as<IntImmNode>()->value), 
+                 std::to_string(p[3][1].as<IntImmNode>()->value)};
     }
-    else {
-    NDimValue = {std::to_string(p[0][0].as<IntImmNode>()->value), std::to_string(p[0][1].as<IntImmNode>()->value)};
-    CDimValue = {std::to_string(p[1][0].as<IntImmNode>()->value), std::to_string(p[1][1].as<IntImmNode>()->value)};
-    HDimValue = {std::to_string(p[2][0].as<IntImmNode>()->value), std::to_string(p[2][1].as<IntImmNode>()->value)};
-    WDimValue = {std::to_string(p[3][0].as<IntImmNode>()->value), std::to_string(p[3][1].as<IntImmNode>()->value)};
-    }
-    //Pad layer NHWC --> NCHW
-    //TFLite Format (NStart, NEnd, HStart, HEnd, WStart, WEnd, CStart, CEnd) (0, 1, 2, 3, 4, 5, 6, 7)
-    //ONNX Format   (NStart, CStart, HStart, WStart, NEnd, CEnd, HEnd, WEnd) (0, 6, 2, 4, 1, 7, 3, 5)
+    // Pad layer NHWC --> NCHW
+    // TFLite Format (NStart, NEnd, HStart, HEnd, WStart, WEnd, CStart, CEnd) 
+    // (0, 1, 2, 3, 4, 5, 6, 7)
+    // ONNX Format   (NStart, CStart, HStart, WStart, NEnd, CEnd, HEnd, WEnd) 
+    // (0, 6, 2, 4, 1, 7, 3, 5)
 
     padding.emplace_back(NDimValue[0]);
     padding.emplace_back(CDimValue[0]);
@@ -124,10 +134,8 @@ class MetaWareNNJSONSerializer : public backend::contrib::JSONSerializer {
   }
 };
 
-/*!
- * \brief The external compiler/codegen tool. It takes a Relay expression/module and
- * compile it into a runtime module.
- */
+// brief The external compiler/codegen tool. It takes a Relay expression/module 
+// compile it into a runtime module
 
 runtime::Module MetaWareNNCompiler(const ObjectRef& ref) {
   std::cout << "\n In MetaWareNNCompiler !!!";
