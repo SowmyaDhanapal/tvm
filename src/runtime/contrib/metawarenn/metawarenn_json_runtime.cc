@@ -16,14 +16,12 @@
 #include "../json/json_runtime.h"
 
 #include "metawarenn_lib/metawarenn_graph.h"
-#include "metawarenn_lib/optimizer/pass_manager.h"
+#include "metawarenn_lib/optimizer/metawarenn_optimizer.h"
 #include "metawarenn_lib/mwnnconvert/mwnn_protobuf/cpp_wrapper/MWNN.pb.h"
 #include "metawarenn_lib/mwnnconvert/mwnn_to_onnx_proto.h"
 #include "metawarenn_lib/inference_engine/mwnn_inference_engine.h"
 #include "metawarenn_lib/inference_engine/mwnn_builder.h"
 
-#define CHW_TO_HWC 0
-#define HWC_TO_CHW 0
 #define INVOKE_NNAC 0
 
 namespace tvm {
@@ -47,14 +45,24 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
   void Init(const Array<NDArray>& consts) override {
     std::cout << "\n In MetaWareNN INIT!!!";
     std::cout << "\n Total Constants : " << consts.size();
+    auto tf_flag = std::getenv("TF_TVM_TO_ONNX");
+    bool tf_tvm_to_onnx = atoi(tf_flag);
     ICHECK_EQ(consts.size(), const_idx_.size())
         << "The number of input constants must match the number of required.";
     // Setup constants entries for weights.
     SetupConstants(consts);
-    //Generated MetaWareNN Graph
+
+    // Generated MetaWareNN Graph
     BuildMetaWareNNGraph();
-    //Optimize MetaWareNN Graph
-    ApplyPasses();
+
+    // Optimize MetaWareNN Graph
+    ::metawarenn::optimizer::NNOptimizer nn_optimizer;
+    nn_optimizer.enable_expand_dim_pass();
+    if (tf_tvm_to_onnx) {
+      nn_optimizer.enable_tf_tvm_to_onnx_conversion();
+    }
+    nn_optimizer.OptimizeGraph(graph_);
+
     #if INVOKE_NNAC
       InvokeNNAC();
     #endif
@@ -1587,115 +1595,6 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
       }
       default: {
         return metawarenn::Element::ElementType::kDynamic;
-      }
-    }
-  }
-
-  void register_expand_dim(::metawarenn::optimizer::PassManager *manager, 
-                           metawarenn::Tensor g_t) {
-    for (auto g_n : graph_->get_graph_nodes()) {
-      if (g_n.get_op_type() == "Mul" || g_n.get_op_type() == "Add") {
-        for (auto n_ip : g_n.get_inputs()) {
-          if (g_t.get_name() == n_ip) {
-            std::cout << "\n Less Dimensions Name : " << g_t.get_name();
-            std::cout << "\t Dims : ";
-            for (auto dim : g_t.get_dims()) {
-              std::cout << dim << ",";
-            }
-            ::metawarenn::optimizer::ExpandDimension ed(graph_, g_t);
-            manager->RegisterPass(ed);
-          }
-        }
-      }
-    }
-  }
-
-  void ApplyPasses() {
-    ::metawarenn::optimizer::PassManager manager;
-    auto node_list = graph_->get_graph_nodes();
-    auto tf_flag = std::getenv("TF_TVM_TO_ONNX");
-    bool tf_tvm_to_onnx = atoi(tf_flag);
-    if(tf_tvm_to_onnx) {
-      for (auto g_t : graph_->get_graph_initializers()) {
-        if (g_t.get_dims().size() == 4) {
-          std::cout << "\n ConvertLayout Name : " << g_t.get_name();
-          std::cout << "\t Dims : ";
-          for (auto dim : g_t.get_dims()) {
-            std::cout << dim << ",";
-          }
-          ::metawarenn::optimizer::ConvertLayout cl(graph_, g_t, CHW_TO_HWC, 
-                                                    HWC_TO_CHW, tf_tvm_to_onnx, 
-                                                    true);
-          manager.RegisterPass(cl);
-        } else {
-          register_expand_dim(&manager, g_t);
-        }
-      }
-      for (auto g_t : graph_->get_graph_ip_tensor()) {
-        if (g_t.get_dims().size() == 4) {
-          std::cout << "\n Name : " << g_t.get_name();
-          std::cout << "\t Dims : ";
-          for (auto dim : g_t.get_dims()) {
-            std::cout << dim << ",";
-          }
-          ::metawarenn::optimizer::ConvertLayout cl(graph_, g_t, CHW_TO_HWC, 
-                                                    HWC_TO_CHW, tf_tvm_to_onnx, 
-                                                    false);
-          manager.RegisterPass(cl);
-        }
-      }
-    } else {
-      for (auto g_t : graph_->get_graph_initializers()) {
-        if (g_t.get_dims().size() < 4) {
-          register_expand_dim(&manager, g_t);
-        }
-      }
-    }
-    /*for (int node_idx = 0; node_idx < graph_->get_graph_nodes().size(); node_idx++) {
-      auto g_n = node_list[node_idx];
-      if(g_n.get_op_type() == "Reshape") {
-        ::metawarenn::optimizer::RemoveReshape rr(graph_, g_n);
-        std::cout << "\n MetaWareNNCC : " << rr.get_name();
-        manager.RegisterPass(rr);
-      }
-      else if(g_n.get_op_type() == "BatchNormalization") {
-        ::metawarenn::optimizer::FuseBatchNorm fbn(graph_, g_n);
-        std::cout << "\n MetaWareNNCC : " << fbn.get_name();
-        manager.RegisterPass(fbn);
-      }
-      else if(g_n.get_op_type() == "Relu") {
-        ::metawarenn::optimizer::FuseRelu fr(graph_, g_n);
-        std::cout << "\n MetaWareNNCC : " << fr.get_name();
-        manager.RegisterPass(fr);
-      }
-    }
-    ::metawarenn::optimizer::CalculateOffset co(graph_);
-    manager.RegisterPass(co);*/
-    manager.RunPasses();
-
-    auto graph_ip_names = graph_->get_graph_ip_names();
-    for (auto g_n : graph_->get_graph_nodes()) {
-      for (auto n_ip : g_n.get_inputs()) {
-        if (!(graph_->initializer_names_.count(n_ip)) && 
-           !(std::count(graph_ip_names.begin(), graph_ip_names.end(), n_ip))) {
-          if (graph_->get_node_producers().count(n_ip)) {
-            graph_->set_node_consumer(n_ip, g_n.get_name());
-          }
-        }
-      }
-      for (auto n_op : g_n.get_outputs()) {
-        graph_->set_node_producer(n_op, g_n.get_name());
-      }
-    }
-    for (auto itr : graph_->get_node_producers()) {
-      std::cout << "\n Produced Tensor : " << itr.first;
-      std::cout << "\n      Producer Node : " << itr.second;
-    }
-    for (auto itr : graph_->get_node_consumers()) {
-      std::cout << "\n Consumed Tensor : " << itr.first;
-      auto& vitr = itr.second;
-      for (auto node_name : vitr) {
-          std::cout << "\n      Consumer Node - " << node_name;
       }
     }
   }
