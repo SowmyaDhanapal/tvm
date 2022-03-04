@@ -61,7 +61,7 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
     if (tf_tvm_to_onnx) {
       nn_optimizer.enable_tf_tvm_to_onnx_conversion();
     }
-    nn_optimizer.OptimizeGraph();
+    nn_optimizer.TransformGraphLayout();
 
     //Create Producer & Consumer Node's for Each Tensor
     graph_->create_producer_consumer_map();
@@ -186,7 +186,6 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
         graph_outputs[g_op.get_name()] = output_buf;
       }
 
-
       if (dynamic_shape_) {
         std::cout << "\n Creating Engine, Context for Dynamic Input shapes";
         builder_config_->add_optimization_profile(optimization_profile_);
@@ -229,7 +228,6 @@ class MetaWareNNJSONRuntime : public JSONRuntimeBase {
           ip_tensors[ip] = graph_inputs[ip_name] + ip_index_offset;
           ip_sizes[ip] = graph_desc.input_desc[ip].size;
         }
-
         for (int op = 0; op < graph_outputs.size(); op++) {
           std::string op_name = graph_desc.output_desc[op].tensor_name;
           int op_index_offset = i * (graph_desc.output_desc[op].size /
