@@ -18,11 +18,13 @@
 
 """MetaWareNN codegen supported operators."""
 
+from os import getenv
 import tvm.ir
 from tvm.relay import transform
 from tvm.relay.build_module import bind_params_by_name
 from tvm.relay.expr import Call
 from tvm.relay.expr_functor import ExprMutator, ExprVisitor
+import json
 
 def _register_external_op_helper(op_name, supported=True):
     """The helper function to indicate that a given operator can be supported
@@ -45,49 +47,11 @@ def _register_external_op_helper(op_name, supported=True):
 
     return _func_wrapper
 
-_register_external_op_helper("nn.pad")
-_register_external_op_helper("nn.conv2d")
-_register_external_op_helper("nn.bias_add")
-_register_external_op_helper("nn.batch_norm")
-_register_external_op_helper("nn.relu")
-_register_external_op_helper("nn.global_avg_pool2d")
-_register_external_op_helper("nn.max_pool2d")
-_register_external_op_helper("nn.avg_pool2d")
-_register_external_op_helper("nn.dense")
-_register_external_op_helper("nn.batch_flatten")
-_register_external_op_helper("nn.lrn")
-_register_external_op_helper("nn.softmax")
-_register_external_op_helper("nn.leaky_relu")
-_register_external_op_helper("add")
-_register_external_op_helper("multiply")
-_register_external_op_helper("max")
-_register_external_op_helper("maximum")
-_register_external_op_helper("minimum")
-_register_external_op_helper("subtract")
-_register_external_op_helper("exp")
-_register_external_op_helper("sum")
-_register_external_op_helper("divide")
-_register_external_op_helper("transpose")
-_register_external_op_helper("clip")
-_register_external_op_helper("squeeze")
-_register_external_op_helper("concatenate")
-_register_external_op_helper("reshape")
-_register_external_op_helper("mean")
-_register_external_op_helper("split")
-_register_external_op_helper("strided_slice")
-_register_external_op_helper("sigmoid")
-_register_external_op_helper("log")
-_register_external_op_helper("tanh")
-_register_external_op_helper("image.resize2d")
-_register_external_op_helper("nn.upsampling")
-_register_external_op_helper("qnn.conv2d")
-_register_external_op_helper("qnn.requantize")
-_register_external_op_helper("qnn.add")
-_register_external_op_helper("qnn.dequantize")
-_register_external_op_helper("qnn.quantize")
-_register_external_op_helper("qnn.concatenate")
-_register_external_op_helper("qnn.dense")
-_register_external_op_helper("cast")
+json_file_path = getenv("METAWARENN_LIB_PATH") + "/mwnnconvert/json/supported_ops.json"
+with open(json_file_path, "r") as read_file:
+    supported_ops = json.load(read_file)
+    for op in supported_ops["tvm"]:
+        _register_external_op_helper(op)
 
 def partition_for_metawarenn(mod, params=None):
     """Partition the graph greedily offloading supported operators to MetaWareNN.
