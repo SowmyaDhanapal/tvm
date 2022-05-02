@@ -40,4 +40,4 @@ git submodule sync
 git submodule update
 git submodule update --init --recursive
 cd src/runtime/contrib/metawarenn/metawarenn_lib
-git checkout metawarenn_dev
+git checkout onnx_conversion
